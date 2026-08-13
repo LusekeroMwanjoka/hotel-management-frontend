@@ -6,155 +6,66 @@ import {
   Plus,
   Download,
   MoreHorizontal,
-  ChevronLeft,
-  ChevronRight,
   UtensilsCrossed,
   ShoppingCart,
   Receipt,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { PageState } from "@/components/DataState";
+import type {
+  RestaurantFoodPurchase,
+  RestaurantMenu,
+  RestaurantSale,
+} from "@/lib/types";
 
 type Tab = "menu" | "sales" | "purchases";
 
-interface MenuItem {
-  id: string;
-  name: string;
-  type: "Starter" | "Main Course" | "Dessert";
-  price: number;
-  description: string;
+interface RestaurantData {
+  menus: RestaurantMenu[];
+  sales: RestaurantSale[];
+  purchases: RestaurantFoodPurchase[];
 }
 
-const menuItems: MenuItem[] = [
-  {
-    id: "1",
-    name: "Grilled Salmon",
-    type: "Main Course",
-    price: 24.99,
-    description: "Atlantic salmon with herb butter and seasonal vegetables",
-  },
-  {
-    id: "2",
-    name: "Caesar Salad",
-    type: "Starter",
-    price: 12.99,
-    description: "Romaine lettuce, parmesan, croutons, Caesar dressing",
-  },
-  {
-    id: "3",
-    name: "Beef Tenderloin",
-    type: "Main Course",
-    price: 32.99,
-    description: "8oz tenderloin with mashed potatoes and peppercorn sauce",
-  },
-  {
-    id: "4",
-    name: "Chocolate Lava Cake",
-    type: "Dessert",
-    price: 10.99,
-    description: "Warm chocolate cake with molten center, vanilla ice cream",
-  },
-  {
-    id: "5",
-    name: "Tomato Basil Soup",
-    type: "Starter",
-    price: 8.99,
-    description: "Roasted tomato soup with fresh basil and cream",
-  },
-  {
-    id: "6",
-    name: "Tiramisu",
-    type: "Dessert",
-    price: 11.99,
-    description: "Classic Italian dessert with mascarpone and espresso",
-  },
-];
+const typeConfig: Record<string, string> = {
+  starter: "bg-blue-100 text-blue-700",
+  "main-course": "bg-emerald-100 text-emerald-700",
+  dissert: "bg-purple-100 text-purple-700",
+};
 
-interface Sale {
-  id: string;
-  item: string;
-  price: number;
-  date: string;
-  soldBy: string;
-  verifiedBy: string;
+function typeLabel(type: string) {
+  if (type === "main-course") return "Main Course";
+  if (type === "dissert") return "Dessert";
+  return "Starter";
 }
-
-const sales: Sale[] = [
-  {
-    id: "S-001",
-    item: "Grilled Salmon",
-    price: 24.99,
-    date: "2023-10-24",
-    soldBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-  {
-    id: "S-002",
-    item: "Beef Tenderloin",
-    price: 32.99,
-    date: "2023-10-24",
-    soldBy: "M. Brown",
-    verifiedBy: "J. Doe",
-  },
-  {
-    id: "S-003",
-    item: "Caesar Salad",
-    price: 12.99,
-    date: "2023-10-23",
-    soldBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-];
-
-interface Purchase {
-  id: string;
-  item: string;
-  quantity: number;
-  unit: string;
-  unitCost: number;
-  totalCost: number;
-  date: string;
-  supplier: string;
-  capturedBy: string;
-}
-
-const purchases: Purchase[] = [
-  {
-    id: "P-001",
-    item: "Salmon Fillet",
-    quantity: 25,
-    unit: "kg",
-    unitCost: 12.5,
-    totalCost: 312.5,
-    date: "2023-10-20",
-    supplier: "OceanFresh Supplies",
-    capturedBy: "J. Doe",
-  },
-  {
-    id: "P-002",
-    item: "Beef Tenderloin",
-    quantity: 30,
-    unit: "kg",
-    unitCost: 18.0,
-    totalCost: 540.0,
-    date: "2023-10-20",
-    supplier: "Premium Meats Ltd",
-    capturedBy: "M. Brown",
-  },
-  {
-    id: "P-003",
-    item: "Fresh Vegetables",
-    quantity: 50,
-    unit: "kg",
-    unitCost: 3.5,
-    totalCost: 175.0,
-    date: "2023-10-22",
-    supplier: "Green Valley Farms",
-    capturedBy: "J. Doe",
-  },
-];
 
 export default function RestaurantPage() {
+  const { data, loading, error, reload } = useApi<RestaurantData>(async () => {
+    const [menusRes, salesRes, purchasesRes] = await Promise.all([
+      api.restaurantMenus(),
+      api.restaurantSales(),
+      api.restaurantFoodPurchases(),
+    ]);
+    return {
+      menus: menusRes.data ?? [],
+      sales: salesRes.data ?? [],
+      purchases: purchasesRes.data ?? [],
+    };
+  });
+
   const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [search, setSearch] = useState("");
+
+  const menus = data?.menus ?? [];
+  const sales = data?.sales ?? [];
+  const purchases = data?.purchases ?? [];
+
+  const empty =
+    activeTab === "menu"
+      ? menus.length === 0
+      : activeTab === "sales"
+      ? sales.length === 0
+      : purchases.length === 0;
 
   return (
     <div className="space-y-6">
@@ -202,17 +113,28 @@ export default function RestaurantPage() {
           </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
             <Plus size={18} />
-            + New {activeTab === "menu" ? "Item" : activeTab === "sales" ? "Sale" : "Purchase"}
+            + New{" "}
+            {activeTab === "menu"
+              ? "Item"
+              : activeTab === "sales"
+              ? "Sale"
+              : "Purchase"}
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      {activeTab === "menu" && <MenuTable items={menuItems} search={search} />}
-      {activeTab === "sales" && <SalesTable sales={sales} search={search} />}
-      {activeTab === "purchases" && (
-        <PurchasesTable purchases={purchases} search={search} />
-      )}
+      <PageState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={empty}
+      >
+        {activeTab === "menu" && <MenuTable items={menus} search={search} />}
+        {activeTab === "sales" && <SalesTable sales={sales} search={search} />}
+        {activeTab === "purchases" && (
+          <PurchasesTable purchases={purchases} search={search} />
+        )}
+      </PageState>
     </div>
   );
 }
@@ -221,20 +143,14 @@ function MenuTable({
   items,
   search,
 }: {
-  items: MenuItem[];
+  items: RestaurantMenu[];
   search: string;
 }) {
   const filtered = items.filter(
     (i) =>
       i.name.toLowerCase().includes(search.toLowerCase()) ||
-      i.type.toLowerCase().includes(search.toLowerCase())
+      typeLabel(i.type).toLowerCase().includes(search.toLowerCase())
   );
-
-  const typeConfig: Record<string, string> = {
-    Starter: "bg-blue-100 text-blue-700",
-    "Main Course": "bg-emerald-100 text-emerald-700",
-    Dessert: "bg-purple-100 text-purple-700",
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -269,13 +185,15 @@ function MenuTable({
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${typeConfig[item.type]}`}
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      typeConfig[item.type] || "bg-gray-100 text-gray-600"
+                    }`}
                   >
-                    {item.type}
+                    {typeLabel(item.type)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  ${item.price.toFixed(2)}
+                  ${Number(item.price ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
                   {item.description}
@@ -298,11 +216,11 @@ function SalesTable({
   sales,
   search,
 }: {
-  sales: Sale[];
+  sales: RestaurantSale[];
   search: string;
 }) {
   const filtered = sales.filter((s) =>
-    s.item.toLowerCase().includes(search.toLowerCase())
+    (s.restaurant_menu?.name ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -332,19 +250,17 @@ function SalesTable({
             {filtered.map((sale) => (
               <tr key={sale.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  {sale.item}
+                  {sale.restaurant_menu?.name ?? `#${sale.restaurant_menu_id}`}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-700">
-                  ${sale.price.toFixed(2)}
+                  ${Number(sale.price ?? 0).toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">{sale.date}</td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {sale.sale_by_user?.name ?? `#${sale.sale_by}`}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {sale.date}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {sale.soldBy}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {sale.verifiedBy}
+                  {sale.verified_by_user?.name ?? `#${sale.verified_by}`}
                 </td>
               </tr>
             ))}
@@ -359,13 +275,13 @@ function PurchasesTable({
   purchases,
   search,
 }: {
-  purchases: Purchase[];
+  purchases: RestaurantFoodPurchase[];
   search: string;
 }) {
   const filtered = purchases.filter(
     (p) =>
-      p.item.toLowerCase().includes(search.toLowerCase()) ||
-      p.supplier?.toLowerCase().includes(search.toLowerCase())
+      p.food_item.toLowerCase().includes(search.toLowerCase()) ||
+      (p.supplier ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -401,23 +317,25 @@ function PurchasesTable({
             {filtered.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  {p.item}
+                  {p.food_item}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
                   {p.quantity} {p.unit}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-700">
-                  ${p.unitCost.toFixed(2)}
+                  ${Number(p.unit_cost ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  ${p.totalCost.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{p.date}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {p.supplier}
+                  ${Number(p.total_cost ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {p.capturedBy}
+                  {p.purchase_date}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {p.supplier ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {p.captured_by_user?.name ?? "—"}
                 </td>
               </tr>
             ))}

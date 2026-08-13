@@ -9,130 +9,55 @@ import {
   ShoppingCart,
   Receipt,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { PageState } from "@/components/DataState";
+import type { BarTransaction } from "@/lib/types";
 
 type Tab = "sales" | "purchases";
 
-interface BarSale {
-  id: string;
-  type: string;
-  quantity: number;
-  unit: string;
-  pricePerUnit: number;
-  totalPrice: number;
-  date: string;
-  capturedBy: string;
-  verifiedBy: string;
+interface BarData {
+  sales: BarTransaction[];
+  purchases: BarTransaction[];
 }
-
-interface BarPurchase {
-  id: string;
-  type: string;
-  quantity: number;
-  unit: string;
-  pricePerUnit: number;
-  totalPrice: number;
-  date: string;
-  capturedBy: string;
-  verifiedBy: string;
-}
-
-const barSales: BarSale[] = [
-  {
-    id: "BS-001",
-    type: "Beer",
-    quantity: 24,
-    unit: "bottles",
-    pricePerUnit: 5.0,
-    totalPrice: 120.0,
-    date: "2023-10-24",
-    capturedBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-  {
-    id: "BS-002",
-    type: "Wine",
-    quantity: 3,
-    unit: "bottles",
-    pricePerUnit: 35.0,
-    totalPrice: 105.0,
-    date: "2023-10-24",
-    capturedBy: "M. Brown",
-    verifiedBy: "J. Doe",
-  },
-  {
-    id: "BS-003",
-    type: "Cocktail",
-    quantity: 8,
-    unit: "glasses",
-    pricePerUnit: 12.0,
-    totalPrice: 96.0,
-    date: "2023-10-23",
-    capturedBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-  {
-    id: "BS-004",
-    type: "Spirits",
-    quantity: 4,
-    unit: "shots",
-    pricePerUnit: 8.0,
-    totalPrice: 32.0,
-    date: "2023-10-23",
-    capturedBy: "A. Smith",
-    verifiedBy: "J. Doe",
-  },
-];
-
-const barPurchases: BarPurchase[] = [
-  {
-    id: "BP-001",
-    type: "Beer",
-    quantity: 10,
-    unit: "crates",
-    pricePerUnit: 25.0,
-    totalPrice: 250.0,
-    date: "2023-10-15",
-    capturedBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-  {
-    id: "BP-002",
-    type: "Wine",
-    quantity: 24,
-    unit: "bottles",
-    pricePerUnit: 12.0,
-    totalPrice: 288.0,
-    date: "2023-10-15",
-    capturedBy: "M. Brown",
-    verifiedBy: "J. Doe",
-  },
-  {
-    id: "BP-003",
-    type: "Spirits",
-    quantity: 12,
-    unit: "bottles",
-    pricePerUnit: 18.0,
-    totalPrice: 216.0,
-    date: "2023-10-10",
-    capturedBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-];
 
 const drinkTypeColors: Record<string, string> = {
-  Beer: "bg-amber-100 text-amber-700",
-  Wine: "bg-purple-100 text-purple-700",
-  Spirits: "bg-red-100 text-red-700",
-  Cocktail: "bg-pink-100 text-pink-700",
-  Cider: "bg-orange-100 text-orange-700",
-  Soda: "bg-blue-100 text-blue-700",
-  Juice: "bg-green-100 text-green-700",
-  Water: "bg-cyan-100 text-cyan-700",
+  beer: "bg-amber-100 text-amber-700",
+  wines: "bg-purple-100 text-purple-700",
+  spirits: "bg-red-100 text-red-700",
+  cocktail: "bg-pink-100 text-pink-700",
+  cider: "bg-orange-100 text-orange-700",
+  soda: "bg-blue-100 text-blue-700",
+  juice: "bg-green-100 text-green-700",
+  water: "bg-cyan-100 text-cyan-700",
 };
 
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export default function BarPage() {
+  const { data, loading, error, reload } = useApi<BarData>(async () => {
+    const [salesRes, purchasesRes] = await Promise.all([
+      api.barSales(),
+      api.barPurchases(),
+    ]);
+    return {
+      sales: salesRes.data ?? [],
+      purchases: purchasesRes.data ?? [],
+    };
+  });
+
   const [activeTab, setActiveTab] = useState<Tab>("sales");
   const [search, setSearch] = useState("");
+
+  const items = activeTab === "sales" ? data?.sales ?? [] : data?.purchases ?? [];
+
+  const filtered = items.filter(
+    (item) =>
+      item.type.toLowerCase().includes(search.toLowerCase()) ||
+      item.date.includes(search)
+  );
 
   return (
     <div className="space-y-6">
@@ -184,46 +109,46 @@ export default function BarPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Type
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Quantity
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Unit Price
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Total
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Date
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Captured By
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Verified By
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {(activeTab === "sales" ? barSales : barPurchases)
-                .filter(
-                  (item) =>
-                    item.type.toLowerCase().includes(search.toLowerCase()) ||
-                    item.date.includes(search)
-                )
-                .map((item) => (
+      <PageState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={items.length === 0}
+      >
+        {/* Table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Type
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Quantity
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Unit Price
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Total
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Date
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Captured By
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Verified By
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <span
@@ -232,26 +157,26 @@ export default function BarPage() {
                           "bg-gray-100 text-gray-600"
                         }`}
                       >
-                        {item.type}
+                        {capitalize(item.type)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {item.quantity} {item.unit}
+                      {Number(item.quantity ?? 0)} × {Number(item.unit ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      ${item.pricePerUnit.toFixed(2)}
+                      ${Number(item.price_per_unit ?? 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                      ${item.totalPrice.toFixed(2)}
+                      ${Number(item.total_price ?? 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {item.date}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {item.capturedBy}
+                      {item.captured_by_user?.name ?? `#${item.captured_by}`}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {item.verifiedBy}
+                      {item.verified_by_user?.name ?? `#${item.verified_by}`}
                     </td>
                     <td className="px-4 py-3">
                       <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
@@ -260,10 +185,11 @@ export default function BarPage() {
                     </td>
                   </tr>
                 ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </PageState>
     </div>
   );
 }

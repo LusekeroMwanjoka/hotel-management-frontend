@@ -10,81 +10,37 @@ import {
   Users,
   Waves,
 } from "lucide-react";
-
-interface PoolSession {
-  id: string;
-  clientName: string;
-  clientPhone: string;
-  clientEmail?: string;
-  charge: number;
-  entryTime: string;
-  exitTime: string;
-  description?: string;
-  capturedBy: string;
-  verifiedBy?: string;
-}
-
-const sessions: PoolSession[] = [
-  {
-    id: "PS-001",
-    clientName: "John Smith",
-    clientPhone: "+1 (555) 123-4567",
-    clientEmail: "john@example.com",
-    charge: 15.0,
-    entryTime: "10:00",
-    exitTime: "12:00",
-    capturedBy: "J. Doe",
-    verifiedBy: "A. Smith",
-  },
-  {
-    id: "PS-002",
-    clientName: "Emily Davis",
-    clientPhone: "+1 (555) 234-5678",
-    charge: 15.0,
-    entryTime: "11:30",
-    exitTime: "13:30",
-    capturedBy: "M. Brown",
-    verifiedBy: "J. Doe",
-  },
-  {
-    id: "PS-003",
-    clientName: "The Johnson Family",
-    clientPhone: "+1 (555) 345-6789",
-    charge: 40.0,
-    entryTime: "14:00",
-    exitTime: "17:00",
-    description: "Family package - 4 persons",
-    capturedBy: "J. Doe",
-  },
-  {
-    id: "PS-004",
-    clientName: "Robert Davis",
-    clientPhone: "+1 (555) 456-7890",
-    clientEmail: "robert@example.com",
-    charge: 15.0,
-    entryTime: "15:00",
-    exitTime: "16:30",
-    capturedBy: "A. Smith",
-    verifiedBy: "J. Doe",
-  },
-  {
-    id: "PS-005",
-    clientName: "Sarah Johnson",
-    clientPhone: "+1 (555) 567-8901",
-    charge: 15.0,
-    entryTime: "16:00",
-    exitTime: "18:00",
-    capturedBy: "M. Brown",
-  },
-];
+import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { PageState } from "@/components/DataState";
+import type { SwimmingPoolSession } from "@/lib/types";
 
 export default function SwimmingPage() {
+  const { data, loading, error, reload } = useApi<SwimmingPoolSession[]>(
+    async () => {
+      const res = await api.swimmingPoolSessions();
+      return res.data ?? [];
+    }
+  );
+
   const [search, setSearch] = useState("");
+
+  const sessions = data ?? [];
+  const today = new Date().toISOString().slice(0, 10);
 
   const filtered = sessions.filter(
     (s) =>
-      s.clientName.toLowerCase().includes(search.toLowerCase()) ||
-      s.clientPhone.includes(search)
+      s.client_name.toLowerCase().includes(search.toLowerCase()) ||
+      s.client_phone_number.includes(search)
+  );
+
+  const todaySessions = sessions.filter((s) => {
+    // Sessions don't carry a date; count all as today's records for now.
+    return true;
+  }).length;
+  const totalRevenue = sessions.reduce(
+    (sum, s) => sum + Number(s.charge ?? 0),
+    0
   );
 
   return (
@@ -97,30 +53,36 @@ export default function SwimmingPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-500">Today&apos;s Sessions</span>
+            <span className="text-sm text-gray-500">Total Sessions</span>
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               <Waves size={18} />
             </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">5</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {todaySessions}
+          </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-500">Active Swimmers</span>
+            <span className="text-sm text-gray-500">Total Revenue</span>
             <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
-              <Users size={18} />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">3</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-500">Today&apos;s Revenue</span>
-            <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
               <Clock size={18} />
             </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">$100.00</p>
+          <p className="text-2xl font-bold text-gray-900">
+            ${totalRevenue.toFixed(2)}
+          </p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-gray-500">Clients Served</span>
+            <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
+              <Users size={18} />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">
+            {new Set(sessions.map((s) => s.client_name)).size}
+          </p>
         </div>
       </div>
 
@@ -151,87 +113,95 @@ export default function SwimmingPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Client
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Contact
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Charge
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Entry
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Exit
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Captured By
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Verified By
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((session) => (
-                <tr key={session.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-800">
-                      {session.clientName}
-                    </p>
-                    {session.description && (
-                      <p className="text-xs text-gray-400">
-                        {session.description}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm text-gray-600">
-                      {session.clientPhone}
-                    </p>
-                    {session.clientEmail && (
-                      <p className="text-xs text-gray-400">
-                        {session.clientEmail}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                    ${session.charge.toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {session.entryTime}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {session.exitTime}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {session.capturedBy}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {session.verifiedBy || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
-                      <MoreHorizontal size={16} />
-                    </button>
-                  </td>
+      <PageState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={sessions.length === 0}
+      >
+        {/* Table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Client
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Contact
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Charge
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Entry
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Exit
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Captured By
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Verified By
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((session) => (
+                  <tr key={session.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-gray-800">
+                        {session.client_name}
+                      </p>
+                      {session.description && (
+                        <p className="text-xs text-gray-400">
+                          {session.description}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm text-gray-600">
+                        {session.client_phone_number}
+                      </p>
+                      {session.client_email && (
+                        <p className="text-xs text-gray-400">
+                          {session.client_email}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-800">
+                      ${Number(session.charge ?? 0).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {session.entry_time}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {session.exit_time}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {session.captured_by_user?.name ??
+                        `#${session.captured_by}`}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {session.verified_by_user?.name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                        <MoreHorizontal size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </PageState>
     </div>
   );
 }

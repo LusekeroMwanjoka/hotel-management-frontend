@@ -1,237 +1,252 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Filter, BedDouble } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, Filter } from "lucide-react";
+import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { PageState } from "@/components/DataState";
+import type {
+  CheckIn,
+  CheckOut,
+  Room,
+  RoomOccupancyStatus,
+} from "@/lib/types";
 
-type RoomStatus = "Vacant" | "Occupied" | "Dirty" | "Maintenance";
+const statusConfig: Record<
+  RoomOccupancyStatus,
+  { label: string; bg: string; text: string; dot: string }
+> = {
+  available: {
+    label: "Vacant",
+    bg: "bg-emerald-50 border-emerald-200",
+    text: "text-emerald-700",
+    dot: "bg-emerald-400",
+  },
+  occupied: {
+    label: "Occupied",
+    bg: "bg-blue-50 border-blue-200",
+    text: "text-blue-700",
+    dot: "bg-blue-400",
+  },
+  reserved: {
+    label: "Reserved",
+    bg: "bg-purple-50 border-purple-200",
+    text: "text-purple-700",
+    dot: "bg-purple-400",
+  },
+  blocked: {
+    label: "Blocked",
+    bg: "bg-gray-50 border-gray-200",
+    text: "text-gray-700",
+    dot: "bg-gray-400",
+  },
+  out_of_service: {
+    label: "Maintenance",
+    bg: "bg-red-50 border-red-200",
+    text: "text-red-700",
+    dot: "bg-red-400",
+  },
+};
 
-interface Room {
-  number: string;
-  type: string;
-  status: RoomStatus;
-  floor: number;
-  guest?: string;
-  notes?: string;
-  cleaned?: string;
-  nights?: number;
+interface RoomsData {
+  rooms: Room[];
+  checkIns: CheckIn[];
+  checkOuts: CheckOut[];
 }
 
-const rooms: Room[] = [
-  {
-    number: "101",
-    type: "Standard",
-    status: "Vacant",
-    floor: 1,
-    cleaned: "2h ago",
-  },
-  {
-    number: "102",
-    type: "Deluxe",
-    status: "Occupied",
-    floor: 1,
-    guest: "Smith, J.",
-    nights: 2,
-  },
-  {
-    number: "103",
-    type: "Suite",
-    status: "Dirty",
-    floor: 1,
-    notes: "Requires turn-down",
-  },
-  {
-    number: "104",
-    type: "Standard",
-    status: "Maintenance",
-    floor: 1,
-    notes: "HVAC Issue",
-  },
-  {
-    number: "105",
-    type: "Standard",
-    status: "Vacant",
-    floor: 1,
-    notes: "Ready",
-  },
-  {
-    number: "201",
-    type: "Suite",
-    status: "Occupied",
-    floor: 2,
-    guest: "Doe, A.",
-    nights: 1,
-  },
-  {
-    number: "202",
-    type: "Deluxe",
-    status: "Occupied",
-    floor: 2,
-    guest: "Lee, C.",
-    nights: 3,
-  },
-  {
-    number: "203",
-    type: "Standard",
-    status: "Dirty",
-    floor: 2,
-    notes: "Checkout completed",
-  },
-  {
-    number: "204",
-    type: "Deluxe",
-    status: "Vacant",
-    floor: 2,
-    cleaned: "1h ago",
-  },
-  {
-    number: "301",
-    type: "Suite",
-    status: "Vacant",
-    floor: 3,
-    cleaned: "30m ago",
-  },
-  {
-    number: "302",
-    type: "Standard",
-    status: "Maintenance",
-    floor: 3,
-    notes: "Plumbing repair",
-  },
-  {
-    number: "303",
-    type: "Deluxe",
-    status: "Occupied",
-    floor: 3,
-    guest: "Brown, M.",
-    nights: 4,
-  },
-];
+function roomFloor(name: string) {
+  const n = parseInt(name.replace(/\D/g, ""), 10);
+  if (Number.isNaN(n)) return 0;
+  return Math.floor(n / 100);
+}
 
 export default function RoomStatusPage() {
+  const { data, loading, error, reload } = useApi<RoomsData>(async () => {
+    const [roomsRes, checkInsRes, checkOutsRes] = await Promise.all([
+      api.rooms(),
+      api.checkIns(),
+      api.checkOuts(),
+    ]);
+    return {
+      rooms: roomsRes.data ?? [],
+      checkIns: checkInsRes.data ?? [],
+      checkOuts: checkOutsRes.data ?? [],
+    };
+  });
+
   const [roomTypeFilter, setRoomTypeFilter] = useState("All Types");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [floorFilter, setFloorFilter] = useState("All Floors");
   const [search, setSearch] = useState("");
 
+  const rooms = data?.rooms ?? [];
+  const checkIns = data?.checkIns ?? [];
+  const checkOuts = data?.checkOuts ?? [];
+
+  const checkedOutIds = new Set(checkOuts.map((c) => c.check_in_id));
+  const guestByRoom = new Map<number, string>();
+  for (const ci of checkIns) {
+    if (!checkedOutIds.has(ci.id) && ci.room_id != null) {
+      const guestName = ci.guest?.full_name
+        ? ci.guest.full_name
+        : [ci.guest?.first_name, ci.guest?.last_name].filter(Boolean).join(" ");
+      guestByRoom.set(ci.room_id, guestName);
+    }
+  }
+
+  const roomTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(rooms.map((r) => r.room_type?.name ?? "Unknown"))
+      ).sort(),
+    [rooms]
+  );
+  const floors = useMemo(
+    () =>
+      Array.from(new Set(rooms.map((r) => roomFloor(r.name)))).sort(
+        (a, b) => a - b
+      ),
+    [rooms]
+  );
+
   const filtered = rooms.filter((room) => {
-    if (roomTypeFilter !== "All Types" && room.type !== roomTypeFilter)
+    const typeName = room.room_type?.name ?? "Unknown";
+    if (roomTypeFilter !== "All Types" && typeName !== roomTypeFilter)
       return false;
-    if (statusFilter !== "All Statuses" && room.status !== statusFilter)
+    if (
+      statusFilter !== "All Statuses" &&
+      room.occupancy_status !== statusFilter
+    )
       return false;
-    if (floorFilter !== "All Floors" && room.floor !== parseInt(floorFilter))
+    if (floorFilter !== "All Floors" && roomFloor(room.name) !== parseInt(floorFilter))
       return false;
-    if (search && !room.number.includes(search) && !room.guest?.toLowerCase().includes(search.toLowerCase()))
-      return false;
+    if (search) {
+      const guest = guestByRoom.get(room.id) ?? "";
+      if (
+        !room.name.toLowerCase().includes(search.toLowerCase()) &&
+        !guest.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+    }
     return true;
   });
 
-  const statusConfig: Record<RoomStatus, { bg: string; text: string; dot: string }> = {
-    Vacant: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-400" },
-    Occupied: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700", dot: "bg-blue-400" },
-    Dirty: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", dot: "bg-amber-400" },
-    Maintenance: { bg: "bg-red-50 border-red-200", text: "text-red-700", dot: "bg-red-400" },
-  };
-
-  const counts = {
-    arrivals: 12,
-    departures: 8,
-    occupancy: 76,
-  };
+  const occupiedCount = rooms.filter(
+    (r) => r.occupancy_status === "occupied"
+  ).length;
+  const availableCount = rooms.filter(
+    (r) => r.occupancy_status === "available"
+  ).length;
+  const occupancyRate = rooms.length
+    ? Math.round((occupiedCount / rooms.length) * 100)
+    : 0;
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Today&apos;s Arrivals</p>
-          <p className="text-2xl font-bold text-gray-900">{counts.arrivals}</p>
+      <PageState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={rooms.length === 0}
+      >
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-sm text-gray-500">Available Rooms</p>
+            <p className="text-2xl font-bold text-gray-900">{availableCount}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-sm text-gray-500">Occupied Rooms</p>
+            <p className="text-2xl font-bold text-gray-900">{occupiedCount}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-sm text-gray-500">Occupancy Rate</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {occupancyRate}%
+            </p>
+          </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Today&apos;s Departures</p>
-          <p className="text-2xl font-bold text-gray-900">{counts.departures}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Occupancy Rate</p>
-          <p className="text-2xl font-bold text-gray-900">{counts.occupancy}%</p>
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search room or guest..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              type="text"
+              placeholder="Search room or guest..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <Filter size={18} className="text-gray-400" />
+          <SelectFilter
+            value={roomTypeFilter}
+            onChange={setRoomTypeFilter}
+            options={["All Types", ...roomTypes]}
+          />
+          <SelectFilter
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              "All Statuses",
+              "available",
+              "occupied",
+              "reserved",
+              "blocked",
+              "out_of_service",
+            ]}
+          />
+          <SelectFilter
+            value={floorFilter}
+            onChange={setFloorFilter}
+            options={["All Floors", ...floors.map(String)]}
           />
         </div>
-        <Filter size={18} className="text-gray-400" />
-        <SelectFilter
-          value={roomTypeFilter}
-          onChange={setRoomTypeFilter}
-          options={["All Types", "Standard", "Deluxe", "Suite"]}
-        />
-        <SelectFilter
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={["All Statuses", "Vacant", "Occupied", "Dirty", "Maintenance"]}
-        />
-        <SelectFilter
-          value={floorFilter}
-          onChange={setFloorFilter}
-          options={["All Floors", "1", "2", "3"]}
-        />
-      </div>
 
-      {/* Status Board */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="font-semibold text-gray-800 mb-4">Status Board</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((room) => {
-            const config = statusConfig[room.status];
-            return (
-              <div
-                key={room.number}
-                className={`rounded-xl border p-4 ${config.bg}`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="text-lg font-bold text-gray-900">
-                      {room.number}
-                    </p>
-                    <p className={`text-xs font-medium ${config.text}`}>
-                      {room.status}
-                    </p>
+        {/* Status Board */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="font-semibold text-gray-800 mb-4">Status Board</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map((room) => {
+              const cfg = statusConfig[room.occupancy_status] ?? statusConfig.available;
+              const guest = guestByRoom.get(room.id);
+              return (
+                <div
+                  key={room.id}
+                  className={`rounded-xl border p-4 ${cfg.bg}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="text-lg font-bold text-gray-900">
+                        {room.name}
+                      </p>
+                      <p className={`text-xs font-medium ${cfg.text}`}>
+                        {cfg.label}
+                      </p>
+                    </div>
+                    <div className={`w-3 h-3 rounded-full ${cfg.dot}`} />
                   </div>
-                  <div className={`w-3 h-3 rounded-full ${config.dot}`} />
+                  <p className="text-sm text-gray-600">
+                    {room.room_type?.name ?? "—"}
+                  </p>
+                  {guest && (
+                    <p className="text-sm font-medium text-gray-800 mt-1">
+                      {guest}
+                    </p>
+                  )}
+                  {room.notes && (
+                    <p className="text-xs text-gray-500 mt-1">{room.notes}</p>
+                  )}
                 </div>
-                <p className="text-sm text-gray-600">{room.type}</p>
-                {room.guest && (
-                  <p className="text-sm font-medium text-gray-800 mt-1">
-                    {room.guest}
-                  </p>
-                )}
-                {room.nights && (
-                  <p className="text-xs text-gray-500">
-                    {room.nights} Night{room.nights > 1 ? "s" : ""}
-                  </p>
-                )}
-                {room.cleaned && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Cleaned {room.cleaned}
-                  </p>
-                )}
-                {room.notes && (
-                  <p className="text-xs text-gray-500 mt-1">{room.notes}</p>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </PageState>
     </div>
   );
 }

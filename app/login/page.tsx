@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { api, saveSession } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,11 +11,25 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Connect to backend auth API
-    router.push("/dashboard");
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.login({ email, password });
+      saveSession({ token: response.token, user: response.user });
+      router.push("/dashboard");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Invalid credentials. Try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,6 +49,12 @@ export default function LoginPage() {
           onSubmit={handleSubmit}
           className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-5"
         >
+          {error && (
+            <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div>
             <label
               htmlFor="email"
@@ -99,10 +120,20 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
-            Sign In
-            <span className="text-lg">→</span>
+            {loading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              <>
+                Sign In
+                <span className="text-lg">→</span>
+              </>
+            )}
           </button>
         </form>
       </div>

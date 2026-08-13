@@ -15,7 +15,8 @@ import {
   ChevronRight,
   PlusCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getSession } from "@/lib/api";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -31,6 +32,28 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [user, setUser] = useState<{ name?: string; role?: string } | null>(
+    null
+  );
+
+  useEffect(() => {
+    const session = getSession();
+    if (session.user) {
+      setUser({
+        name: session.user.name,
+        role: session.user.role ?? session.user.department,
+      });
+    }
+  }, []);
+
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "ST";
 
   return (
     <aside
@@ -103,11 +126,15 @@ export default function Sidebar() {
         <div className="px-3 py-4 border-t border-emerald-800">
           <div className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-300">
             <div className="w-7 h-7 rounded-full bg-emerald-700 flex items-center justify-center text-white font-medium text-sm">
-              JD
+              {initials}
             </div>
             <div className="min-w-0">
-              <p className="truncate font-medium text-white">J. Doe</p>
-              <p className="truncate">Front Desk</p>
+              <p className="truncate font-medium text-white">
+                {user?.name ?? "Staff"}
+              </p>
+              <p className="truncate capitalize">
+                {user?.role ?? "Lodge Ops"}
+              </p>
             </div>
           </div>
         </div>
