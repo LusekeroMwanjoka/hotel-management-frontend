@@ -4,6 +4,7 @@ import type {
   CheckIn,
   CheckOut,
   ConferenceHallBooking,
+  DashboardResponse,
   Guest,
   GymSubscription,
   GymSubscriptionType,
@@ -14,6 +15,7 @@ import type {
   RestaurantSale,
   Room,
   RoomsResponse,
+  RoomType,
   SparAppointment,
   SparService,
   SwimmingPoolSession,
@@ -140,6 +142,10 @@ export const api = {
     return request<void>("/logout", { method: "POST" });
   },
 
+  // Dashboard
+  dashboard: (params: { start?: string; end?: string } = {}) =>
+    request<DashboardResponse>(withQuery("/dashboard", params)),
+
   // Rooms
   rooms: (params: {
     page?: number;
@@ -159,10 +165,33 @@ export const api = {
     return request<RoomsResponse>(`/rooms?${qs.toString()}`);
   },
 
+  roomTypes: () => listAll<RoomType>("/room-types"),
+  createRoom: async (payload: Partial<Room>) => {
+    const res = await request<{ data: Room }>("/rooms", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+
+  createRoomType: async (payload: Partial<RoomType>) => {
+    const res = await request<{ data: RoomType }>("/room-types", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+
   // Guests
   guests: () => list<Guest>("/guests"),
-  createGuest: (payload: Partial<Guest>) =>
-    request<Guest>("/guests", { method: "POST", body: JSON.stringify(payload) }),
+  guestsAll: () => listAll<Guest>("/guests"),
+  createGuest: async (payload: Partial<Guest>) => {
+    const res = await request<{ data: Guest }>("/guests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
 
   // Check-in / check-out
   checkIns: (params: { page?: number } = {}) =>
@@ -184,12 +213,50 @@ export const api = {
     list<RestaurantFoodPurchase>(
       withQuery("/restaurant-food-purchases", params)
     ),
+  restaurantMenusAll: () => listAll<RestaurantMenu>("/restaurant-menus"),
+  createRestaurantMenu: async (payload: Partial<RestaurantMenu>) => {
+    const res = await request<{ data: RestaurantMenu }>("/restaurant-menus", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  createRestaurantSale: async (payload: Partial<RestaurantSale>) => {
+    const res = await request<{ data: RestaurantSale }>("/restaurant-sales", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  createRestaurantFoodPurchase: async (
+    payload: Partial<RestaurantFoodPurchase>
+  ) => {
+    const res = await request<{ data: RestaurantFoodPurchase }>(
+      "/restaurant-food-purchases",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    return res.data;
+  },
 
   // Bar
   barSales: (params: { page?: number; search?: string } = {}) =>
     list<BarTransaction>(withQuery("/bar-sales", params)),
   barPurchases: (params: { page?: number; search?: string } = {}) =>
     list<BarTransaction>(withQuery("/bar-purchases", params)),
+  createBarSale: async (payload: Partial<BarTransaction>) => {
+    const res = await request<{ data: BarTransaction }>("/bar-sales", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  createBarPurchase: async (payload: Partial<BarTransaction>) => {
+    const res = await request<{ data: BarTransaction }>("/bar-purchases", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
 
   // Gym
   gymSubscriptions: (params: {
@@ -199,6 +266,13 @@ export const api = {
   } = {}) => list<GymSubscription>(withQuery("/gym-subscriptions", params)),
   gymSubscriptionTypes: () =>
     listAll<GymSubscriptionType>("/gym-subscription-types"),
+  createGymSubscription: async (payload: Partial<GymSubscription>) => {
+    const res = await request<{ data: GymSubscription }>("/gym-subscriptions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
 
   // Spa
   sparServices: () => listAll<SparService>("/spar-services"),
@@ -207,16 +281,48 @@ export const api = {
     search?: string;
     service?: string;
   } = {}) => list<SparAppointment>(withQuery("/spar-appointments", params)),
+  createSparAppointment: async (payload: Partial<SparAppointment>) => {
+    const res = await request<{ data: SparAppointment }>("/spar-appointments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  createSparService: async (payload: Partial<SparService>) => {
+    const res = await request<{ data: SparService }>("/spar-services", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
 
   // Pool
   swimmingPoolSessions: (params: { page?: number; search?: string } = {}) =>
     request<SwimmingPoolSessionsResponse>(
       withQuery("/swimming-pool-sessions", params)
     ),
+  createSwimmingPoolSession: async (
+    payload: Partial<SwimmingPoolSession>
+  ) => {
+    const res = await request<{ data: SwimmingPoolSession }>(
+      "/swimming-pool-sessions",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    return res.data;
+  },
 
   // Conference
   conferenceHallBookings: (params: { page?: number; search?: string } = {}) =>
     list<ConferenceHallBooking>(withQuery("/conference-hall-bookings", params)),
+  createConferenceHallBooking: async (
+    payload: Partial<ConferenceHallBooking>
+  ) => {
+    const res = await request<{ data: ConferenceHallBooking }>(
+      "/conference-hall-bookings",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    return res.data;
+  },
 };
 
 // --- Auth session helpers -------------------------------------------------

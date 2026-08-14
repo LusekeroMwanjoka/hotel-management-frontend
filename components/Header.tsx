@@ -1,7 +1,8 @@
 "use client";
 
 import { Search, Bell, Settings, LogOut } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { api, clearSession } from "@/lib/api";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -17,7 +18,18 @@ const pageTitles: Record<string, string> = {
 
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const title = pageTitles[pathname] || pathname;
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // Token may already be invalid; clear local session regardless.
+    }
+    clearSession();
+    router.push("/login");
+  };
 
   return (
     <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
@@ -40,7 +52,11 @@ export default function Header() {
         <button className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
           <Settings size={20} />
         </button>
-        <button className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+        <button
+          onClick={handleLogout}
+          className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+          aria-label="Logout"
+        >
           <LogOut size={20} />
         </button>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search, User, Clock, CalendarDays } from "lucide-react";
+import { Plus, Search, User, Clock, CalendarDays, X, Loader2 } from "lucide-react";
 import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
@@ -20,6 +20,31 @@ export default function SpaPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search);
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [apptForm, setApptForm] = useState({
+    spar_service_id: "",
+    client_name: "",
+    client_phone_number: "",
+    client_email: "",
+    date: "",
+    start_time: "",
+    end_time: "",
+    charge: "",
+    description: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [serviceForm, setServiceForm] = useState({
+    name: "",
+    type: "",
+    charge: "",
+    description: "",
+  });
+  const [savingService, setSavingService] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useApi<SpaData>(
     async () => {
@@ -63,6 +88,93 @@ export default function SpaPage() {
     return Array.from(map.entries());
   }, [sorted]);
 
+  const openAddModal = () => {
+    setModalError(null);
+    setApptForm({
+      spar_service_id: "",
+      client_name: "",
+      client_phone_number: "",
+      client_email: "",
+      date: new Date().toISOString().slice(0, 10),
+      start_time: "",
+      end_time: "",
+      charge: "",
+      description: "",
+    });
+    setShowAddModal(true);
+  };
+
+  const handleSubmit = async () => {
+    if (
+      !apptForm.spar_service_id ||
+      !apptForm.client_name.trim() ||
+      !apptForm.client_phone_number.trim() ||
+      !apptForm.date ||
+      !apptForm.start_time ||
+      !apptForm.end_time
+    ) {
+      setModalError(
+        "Service, client name, phone, date and times are required."
+      );
+      return;
+    }
+
+    setSaving(true);
+    setModalError(null);
+    try {
+      await api.createSparAppointment({
+        spar_service_id: Number(apptForm.spar_service_id),
+        client_name: apptForm.client_name.trim(),
+        client_phone_number: apptForm.client_phone_number.trim(),
+        client_email: apptForm.client_email || null,
+        date: apptForm.date,
+        start_time: apptForm.start_time,
+        end_time: apptForm.end_time,
+        charge: apptForm.charge ? Number(apptForm.charge) : undefined,
+        description: apptForm.description || null,
+      });
+      setShowAddModal(false);
+      reload();
+    } catch (e) {
+      setModalError(
+        e instanceof Error ? e.message : "Failed to add appointment."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openAddService = () => {
+    setServiceError(null);
+    setServiceForm({ name: "", type: "", charge: "", description: "" });
+    setShowServiceModal(true);
+  };
+
+  const handleCreateService = async () => {
+    if (!serviceForm.name.trim() || !serviceForm.type.trim()) {
+      setServiceError("Name and type are required.");
+      return;
+    }
+    setSavingService(true);
+    setServiceError(null);
+    try {
+      await api.createSparService({
+        name: serviceForm.name.trim(),
+        type: serviceForm.type.trim(),
+        charge: serviceForm.charge ? Number(serviceForm.charge) : undefined,
+        description: serviceForm.description || null,
+      });
+      setShowServiceModal(false);
+      reload();
+    } catch (e) {
+      setServiceError(
+        e instanceof Error ? e.message : "Failed to add service."
+      );
+    } finally {
+      setSavingService(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-gray-500">
@@ -102,10 +214,22 @@ export default function SpaPage() {
             ))}
           </select>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
-          <Plus size={18} />
-          + New Appointment
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openAddService}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            <Plus size={18} />
+            Add Service
+          </button>
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+          >
+            <Plus size={18} />
+            + New Appointment
+          </button>
+        </div>
       </div>
 
       <PageState
@@ -177,6 +301,366 @@ export default function SpaPage() {
           onPageChange={setPage}
         />
       </PageState>
+
+      {showAddModal && (
+        <AddAppointmentModal
+          services={services}
+          form={apptForm}
+          setForm={setApptForm}
+          error={modalError}
+          saving={saving}
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
+
+      {showServiceModal && (
+        <AddServiceModal
+          form={serviceForm}
+          setForm={setServiceForm}
+          error={serviceError}
+          saving={savingService}
+          onClose={() => setShowServiceModal(false)}
+          onSubmit={handleCreateService}
+        />
+      )}
+    </div>
+  );
+}
+
+type ApptFormState = {
+  spar_service_id: string;
+  client_name: string;
+  client_phone_number: string;
+  client_email: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  charge: string;
+  description: string;
+};
+
+function AddAppointmentModal({
+  services,
+  form,
+  setForm,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  services: SparService[];
+  form: ApptFormState;
+  setForm: (form: ApptFormState) => void;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">New Appointment</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Service *
+            </label>
+            <select
+              value={form.spar_service_id}
+              onChange={(e) => {
+                const s = services.find(
+                  (x) => x.id === Number(e.target.value)
+                );
+                setForm({
+                  ...form,
+                  spar_service_id: e.target.value,
+                  charge: s ? String(s.charge) : form.charge,
+                });
+              }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Select a service</option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — ${Number(s.charge ?? 0).toFixed(2)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Client Name *
+            </label>
+            <input
+              type="text"
+              value={form.client_name}
+              onChange={(e) =>
+                setForm({ ...form, client_name: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone *
+              </label>
+              <input
+                type="text"
+                value={form.client_phone_number}
+                onChange={(e) =>
+                  setForm({ ...form, client_phone_number: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                value={form.client_email}
+                onChange={(e) =>
+                  setForm({ ...form, client_email: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date *
+            </label>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Time *
+              </label>
+              <input
+                type="time"
+                value={form.start_time}
+                onChange={(e) =>
+                  setForm({ ...form, start_time: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Time *
+              </label>
+              <input
+                type="time"
+                value={form.end_time}
+                onChange={(e) =>
+                  setForm({ ...form, end_time: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Charge ($)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.charge}
+              onChange={(e) => setForm({ ...form, charge: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+        {error && (
+          <div className="mx-5 mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 px-4 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ServiceFormState = {
+  name: string;
+  type: string;
+  charge: string;
+  description: string;
+};
+
+function AddServiceModal({
+  form,
+  setForm,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  form: ServiceFormState;
+  setForm: (form: ServiceFormState) => void;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">Add Service</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Name *
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Swedish Massage"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Type *
+            </label>
+            <input
+              type="text"
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              placeholder="e.g. Massage"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Charge ($)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.charge}
+              onChange={(e) => setForm({ ...form, charge: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+        {error && (
+          <div className="mx-5 mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 px-4 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Add Service"
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

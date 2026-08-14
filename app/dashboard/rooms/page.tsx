@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, Plus, X, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { PageState } from "@/components/DataState";
@@ -10,6 +10,7 @@ import type {
   CheckOut,
   Room,
   RoomOccupancyStatus,
+  RoomType,
 } from "@/lib/types";
 
 const statusConfig: Record<
@@ -50,6 +51,7 @@ const statusConfig: Record<
 
 interface RoomsData {
   rooms: Room[];
+  roomTypeOptions: RoomType[];
   stats: Partial<Record<RoomOccupancyStatus, number>>;
   roomTypes: string[];
   floors: number[];
@@ -68,6 +70,29 @@ export default function RoomStatusPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
+  const [showAddRoom, setShowAddRoom] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    name: "",
+    room_type_id: "",
+    occupancy_status: "available",
+    description: "",
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const [showAddRoomType, setShowAddRoomType] = useState(false);
+  const [roomTypeForm, setRoomTypeForm] = useState({
+    code: "",
+    name: "",
+    base_rate: "",
+    bed_type: "single",
+    description: "",
+    notes: "",
+  });
+  const [savingType, setSavingType] = useState(false);
+  const [typeError, setTypeError] = useState<string | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
@@ -75,20 +100,24 @@ export default function RoomStatusPage() {
 
   const { data, loading, error, reload } = useApi<RoomsData>(
     async () => {
-      const [roomsRes, checkInsRes, checkOutsRes] = await Promise.all([
-        api.rooms({
-          page,
-          room_type: roomTypeFilter !== "All Types" ? roomTypeFilter : undefined,
-          occupancy_status:
-            statusFilter !== "All Statuses" ? statusFilter : undefined,
-          floor: floorFilter !== "All Floors" ? floorFilter : undefined,
-          search: debouncedSearch || undefined,
-        }),
-        api.checkIns(),
-        api.checkOuts(),
-      ]);
+      const [roomsRes, checkInsRes, checkOutsRes, roomTypesRes] =
+        await Promise.all([
+          api.rooms({
+            page,
+            room_type:
+              roomTypeFilter !== "All Types" ? roomTypeFilter : undefined,
+            occupancy_status:
+              statusFilter !== "All Statuses" ? statusFilter : undefined,
+            floor: floorFilter !== "All Floors" ? floorFilter : undefined,
+            search: debouncedSearch || undefined,
+          }),
+          api.checkIns(),
+          api.checkOuts(),
+          api.roomTypes(),
+        ]);
       return {
         rooms: roomsRes.data ?? [],
+        roomTypeOptions: roomTypesRes.data ?? [],
         stats: roomsRes.stats ?? {},
         roomTypes: roomsRes.room_types ?? [],
         floors: roomsRes.floors ?? [],
@@ -105,6 +134,7 @@ export default function RoomStatusPage() {
   const rooms = data?.rooms ?? [];
   const stats = data?.stats ?? {};
   const roomTypes = data?.roomTypes ?? [];
+  const roomTypeOptions = data?.roomTypeOptions ?? [];
   const floors = data?.floors ?? [];
   const total = data?.total ?? 0;
   const currentPage = data?.currentPage ?? 1;
@@ -127,15 +157,89 @@ export default function RoomStatusPage() {
   const occupiedCount = stats.occupied ?? 0;
   const occupancyRate = total ? Math.round((occupiedCount / total) * 100) : 0;
 
+  const openAddRoom = () => {
+    setFormError(null);
+    setRoomForm({
+      name: "",
+      room_type_id: "",
+      occupancy_status: "available",
+      description: "",
+      notes: "",
+    });
+    setShowAddRoom(true);
+  };
+
+  const handleCreateRoom = async () => {
+    if (!roomForm.name.trim() || !roomForm.room_type_id) {
+      setFormError("Room name and room type are required.");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await api.createRoom({
+        name: roomForm.name.trim(),
+        room_type_id: Number(roomForm.room_type_id),
+        occupancy_status: roomForm.occupancy_status as RoomOccupancyStatus,
+        description: roomForm.description || null,
+        notes: roomForm.notes || null,
+      });
+      setShowAddRoom(false);
+      reload();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "Failed to add room.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openAddRoomType = () => {
+    setTypeError(null);
+    setRoomTypeForm({
+      code: "",
+      name: "",
+      base_rate: "",
+      bed_type: "single",
+      description: "",
+      notes: "",
+    });
+    setShowAddRoomType(true);
+  };
+
+  const handleCreateRoomType = async () => {
+    if (
+      !roomTypeForm.code.trim() ||
+      !roomTypeForm.name.trim() ||
+      !roomTypeForm.base_rate
+    ) {
+      setTypeError("Code, name and base rate are required.");
+      return;
+    }
+    setSavingType(true);
+    setTypeError(null);
+    try {
+      await api.createRoomType({
+        code: roomTypeForm.code.trim(),
+        name: roomTypeForm.name.trim(),
+        base_rate: Number(roomTypeForm.base_rate),
+        bed_type: roomTypeForm.bed_type,
+        description: roomTypeForm.description || null,
+        notes: roomTypeForm.notes || null,
+      });
+      setShowAddRoomType(false);
+      reload();
+    } catch (e) {
+      setTypeError(
+        e instanceof Error ? e.message : "Failed to add room type."
+      );
+    } finally {
+      setSavingType(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <PageState
-        loading={loading}
-        error={error}
-        onRetry={reload}
-        empty={rooms.length === 0}
-      >
-        {/* Stats */}
+      {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <p className="text-sm text-gray-500">Available Rooms</p>
@@ -203,8 +307,30 @@ export default function RoomStatusPage() {
             }}
             options={["All Floors", ...floors.map(String)]}
           />
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={openAddRoomType}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Plus size={18} />
+              Add Room Type
+            </button>
+            <button
+              onClick={openAddRoom}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+            >
+              <Plus size={18} />
+              Add Room
+            </button>
+          </div>
         </div>
 
+      <PageState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={rooms.length === 0}
+      >
         {/* Status Board */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="font-semibold text-gray-800 mb-4">Status Board</h3>
@@ -273,6 +399,29 @@ export default function RoomStatusPage() {
           </div>
         </div>
       </PageState>
+
+      {showAddRoom && (
+        <AddRoomModal
+          roomTypes={roomTypeOptions}
+          form={roomForm}
+          setForm={setRoomForm}
+          error={formError}
+          saving={saving}
+          onClose={() => setShowAddRoom(false)}
+          onSubmit={handleCreateRoom}
+        />
+      )}
+
+      {showAddRoomType && (
+        <AddRoomTypeModal
+          form={roomTypeForm}
+          setForm={setRoomTypeForm}
+          error={typeError}
+          saving={savingType}
+          onClose={() => setShowAddRoomType(false)}
+          onSubmit={handleCreateRoomType}
+        />
+      )}
     </div>
   );
 }
@@ -298,5 +447,311 @@ function SelectFilter({
         </option>
       ))}
     </select>
+  );
+}
+
+type RoomFormState = {
+  name: string;
+  room_type_id: string;
+  occupancy_status: string;
+  description: string;
+  notes: string;
+};
+
+function AddRoomModal({
+  roomTypes,
+  form,
+  setForm,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  roomTypes: RoomType[];
+  form: RoomFormState;
+  setForm: (form: RoomFormState) => void;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">Add Room</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Room Name *
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Room 101"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Room Type *
+            </label>
+            <select
+              value={form.room_type_id}
+              onChange={(e) =>
+                setForm({ ...form, room_type_id: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Select a room type</option>
+              {roomTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} — ${Number(t.base_rate ?? 0).toFixed(2)}/night
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
+            <select
+              value={form.occupancy_status}
+              onChange={(e) =>
+                setForm({ ...form, occupancy_status: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="available">Available</option>
+              <option value="reserved">Reserved</option>
+              <option value="occupied">Occupied</option>
+              <option value="blocked">Blocked</option>
+              <option value="out_of_service">Out of Service</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          {error && (
+            <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 px-4 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Add Room"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RoomTypeFormState = {
+  code: string;
+  name: string;
+  base_rate: string;
+  bed_type: string;
+  description: string;
+  notes: string;
+};
+
+function AddRoomTypeModal({
+  form,
+  setForm,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  form: RoomTypeFormState;
+  setForm: (form: RoomTypeFormState) => void;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">Add Room Type</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Code *
+            </label>
+            <input
+              type="text"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              placeholder="e.g. STD"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Name *
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Standard"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Base Rate ($) *
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.base_rate}
+              onChange={(e) =>
+                setForm({ ...form, base_rate: e.target.value })
+              }
+              placeholder="0.00"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Bed Type *
+            </label>
+            <select
+              value={form.bed_type}
+              onChange={(e) => setForm({ ...form, bed_type: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="single">Single</option>
+              <option value="double">Double</option>
+              <option value="twin">Twin</option>
+              <option value="queen">Queen</option>
+              <option value="king">King</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          {error && (
+            <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 px-4 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Add Room Type"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

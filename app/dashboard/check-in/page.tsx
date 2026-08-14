@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check,
   Search,
   Plus,
   Minus,
@@ -17,12 +16,6 @@ import { useApi } from "@/lib/useApi";
 import { PageState } from "@/components/DataState";
 import type { Room } from "@/lib/types";
 
-const steps = [
-  { id: 1, label: "Select Room" },
-  { id: 2, label: "Guest Details" },
-  { id: 3, label: "Stay & Payment" },
-];
-
 export default function CheckInPage() {
   const router = useRouter();
   const { data: rooms, loading, error, reload } = useApi<Room[]>(async () => {
@@ -35,7 +28,6 @@ export default function CheckInPage() {
     [rooms]
   );
 
-  const [currentStep, setCurrentStep] = useState(1);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [showRoomSelector, setShowRoomSelector] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -77,12 +69,10 @@ export default function CheckInPage() {
   const handleSubmit = async () => {
     if (!selectedRoom) {
       setSubmitError("Please select a room.");
-      setCurrentStep(1);
       return;
     }
     if (!guest.firstName || !guest.lastName || !guest.nationality) {
       setSubmitError("Guest first name, last name and nationality are required.");
-      setCurrentStep(2);
       return;
     }
 
@@ -128,39 +118,6 @@ export default function CheckInPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      {/* Step Progress */}
-      <div className="flex items-center justify-center mb-8">
-        {steps.map((step, idx) => (
-          <div key={step.id} className="flex items-center">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  currentStep >= step.id
-                    ? "bg-emerald-600 text-white"
-                    : "bg-gray-200 text-gray-500"
-                }`}
-              >
-                {currentStep > step.id ? <Check size={16} /> : step.id}
-              </div>
-              <span
-                className={`text-sm font-medium ${
-                  currentStep >= step.id ? "text-emerald-700" : "text-gray-400"
-                }`}
-              >
-                {step.label}
-              </span>
-            </div>
-            {idx < steps.length - 1 && (
-              <div
-                className={`w-12 h-0.5 mx-3 ${
-                  currentStep > step.id ? "bg-emerald-600" : "bg-gray-200"
-                }`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-
       <PageState
         loading={loading}
         error={error}
@@ -171,7 +128,7 @@ export default function CheckInPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Step 1: Room Selection */}
+            {/* Room Selection */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-800">Selected Room</h3>
@@ -262,7 +219,7 @@ export default function CheckInPage() {
               )}
             </div>
 
-            {/* Step 2: Guest Information */}
+            {/* Guest Information */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="font-semibold text-gray-800 mb-4">
                 Guest Information

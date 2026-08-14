@@ -1,17 +1,113 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   TrendingUp,
   TrendingDown,
   Users,
   DoorOpen,
   BedDouble,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import type { DashboardEvent, DashboardResponse } from "@/lib/types";
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function dateKey(year: number, month: number, day: number) {
+  return `${year}-${pad(month + 1)}-${pad(day)}`;
+}
+
+function toISO(d: Date) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function trendText(today: number, yesterday: number) {
+  const diff = today - yesterday;
+  if (diff === 0) return { text: "same as yesterday", up: true };
+  return {
+    text: `${diff > 0 ? "+" : ""}${diff} vs yesterday`,
+    up: diff > 0,
+  };
+}
 
 export default function DashboardPage() {
-  const today = new Date();
-  const currentMonth = today.toLocaleString("default", { month: "long" });
-  const currentYear = today.getFullYear();
+  const [viewMode, setViewMode] = useState<"month" | "week">("month");
+  const [cursor, setCursor] = useState(() => new Date());
+
+  const range = useMemo(() => {
+    const start = new Date(cursor);
+    const end = new Date(cursor);
+    if (viewMode === "month") {
+      start.setDate(1);
+      end.setMonth(end.getMonth() + 1, 0);
+    } else {
+      const day = start.getDay();
+      start.setDate(start.getDate() - day);
+      end.setTime(start.getTime());
+      end.setDate(end.getDate() + 6);
+    }
+    return { start: toISO(start), end: toISO(end) };
+  }, [viewMode, cursor]);
+
+  const { data, loading, error, reload } = useApi<DashboardResponse>(
+    async () => api.dashboard(range),
+    [range]
+  );
+
+  const stats = data?.stats;
+  const recent = data?.recent_check_ins ?? [];
+  const events = data?.events ?? [];
+
+  const eventMap = useMemo(() => {
+    const map = new Map<string, DashboardEvent[]>();
+    for (const ev of events) {
+      const list = map.get(ev.date) ?? [];
+      list.push(ev);
+      map.set(ev.date, list);
+    }
+    return map;
+  }, [events]);
+
+  const occupancyRate = stats?.total_rooms
+    ? Math.round((stats.occupied_rooms / stats.total_rooms) * 100)
+    : 0;
+
+  const arrivalsTrend = trendText(
+    stats?.today_arrivals ?? 0,
+    stats?.yesterday_arrivals ?? 0
+  );
+  const departuresTrend = trendText(
+    stats?.today_departures ?? 0,
+    stats?.yesterday_departures ?? 0
+  );
+
+  const shift = (dir: -1 | 1) => {
+    setCursor((c) => {
+      const d = new Date(c);
+      if (viewMode === "month") {
+        d.setMonth(d.getMonth() + dir);
+      } else {
+        d.setDate(d.getDate() + dir * 7);
+      }
+      return d;
+    });
+  };
+
+  const title =
+    viewMode === "month"
+      ? `${cursor.toLocaleString("default", { month: "long" })} ${cursor.getFullYear()}`
+      : `${new Date(range.start).toLocaleDateString("default", {
+          month: "short",
+          day: "numeric",
+        })} – ${new Date(range.end).toLocaleDateString("default", {
+          month: "short",
+          day: "numeric",
+        })}`;
 
   return (
     <div className="space-y-6">
@@ -20,55 +116,102 @@ export default function DashboardPage() {
         <StatCard
           icon={DoorOpen}
           label="Today's Arrivals"
-          value="12"
-          trend="+3 vs yesterday"
-          trendUp
+          value={String(stats?.today_arrivals ?? 0)}
+          trend={arrivalsTrend.text}
+          trendUp={arrivalsTrend.up}
           color="emerald"
         />
         <StatCard
           icon={DoorOpen}
           label="Today's Departures"
-          value="8"
-          trend="-2 vs yesterday"
-          trendUp={false}
+          value={String(stats?.today_departures ?? 0)}
+          trend={departuresTrend.text}
+          trendUp={departuresTrend.up}
           color="blue"
         />
         <StatCard
           icon={BedDouble}
           label="Occupancy Rate"
-          value="76%"
-          trend="+5% vs last week"
-          trendUp
+          value={`${occupancyRate}%`}
+          trend={`${stats?.occupied_rooms ?? 0} of ${stats?.total_rooms ?? 0} rooms`}
           color="purple"
         />
         <StatCard
           icon={Users}
           label="Active Guests"
-          value="34"
-          trend="+8 new this week"
-          trendUp
+          value={String(stats?.active_guests ?? 0)}
+          trend="currently checked in"
           color="orange"
         />
       </div>
 
-      {/* Quick Actions & Calendar */}
+      {/* Calendar & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800">
-              {currentMonth} {currentYear}
-            </h3>
-            <div className="flex gap-2">
-              <button className="px-3 py-1 text-sm rounded-md bg-emerald-100 text-emerald-700 font-medium">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => shift(-1)}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Previous"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <h3 className="font-semibold text-gray-800">{title}</h3>
+              <button
+                onClick={() => shift(1)}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Next"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode("month")}
+                className={`px-3 py-1 text-sm rounded-md font-medium ${
+                  viewMode === "month"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
                 Month
               </button>
-              <button className="px-3 py-1 text-sm rounded-md text-gray-500 hover:bg-gray-100">
+              <button
+                onClick={() => setViewMode("week")}
+                className={`px-3 py-1 text-sm rounded-md font-medium ${
+                  viewMode === "week"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
                 Week
               </button>
             </div>
           </div>
-          <CalendarGrid month={today.getMonth()} year={today.getFullYear()} />
+
+          {loading && (
+            <p className="text-sm text-gray-400 py-10 text-center">
+              Loading calendar…
+            </p>
+          )}
+          {error && (
+            <div className="py-10 text-center">
+              <p className="text-sm text-red-600">{error}</p>
+              <button
+                onClick={reload}
+                className="mt-2 text-sm text-emerald-600 font-medium"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {!loading && !error && viewMode === "month" && (
+            <MonthCalendar cursor={cursor} events={eventMap} />
+          )}
+          {!loading && !error && viewMode === "week" && (
+            <WeekView start={new Date(range.start)} events={eventMap} />
+          )}
         </div>
 
         {/* Recent Activity */}
@@ -76,64 +219,35 @@ export default function DashboardPage() {
           <h3 className="font-semibold text-gray-800 mb-4">
             Recent Check-ins
           </h3>
-          <div className="space-y-3">
-            {[
-              {
-                name: "Sarah Johnson",
-                room: "Suite 402",
-                time: "14:30",
-                status: "Checked In",
-              },
-              {
-                name: "Michael Chen",
-                room: "Deluxe 205",
-                time: "13:15",
-                status: "Checked In",
-              },
-              {
-                name: "Emma Wilson",
-                room: "Standard 103",
-                time: "12:00",
-                status: "Pending",
-              },
-              {
-                name: "Robert Davis",
-                room: "Suite 310",
-                time: "11:45",
-                status: "Checked In",
-              },
-              {
-                name: "Lisa Park",
-                room: "Deluxe 202",
-                time: "10:30",
-                status: "Checked In",
-              },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-gray-800">
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-gray-500">{item.room}</p>
+          {recent.length === 0 ? (
+            <p className="text-sm text-gray-400 py-6 text-center">
+              No recent check-ins.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {recent.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      {item.guest_name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {item.room_name ?? "—"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">{item.checkin_time}</p>
+                    <span className="text-xs font-medium text-emerald-600">
+                      Checked In
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">{item.time}</p>
-                  <span
-                    className={`text-xs font-medium ${
-                      item.status === "Checked In"
-                        ? "text-emerald-600"
-                        : "text-amber-600"
-                    }`}
-                  >
-                    {item.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -151,8 +265,8 @@ function StatCard({
   icon: React.ElementType;
   label: string;
   value: string;
-  trend: string;
-  trendUp: boolean;
+  trend?: string;
+  trendUp?: boolean;
   color: string;
 }) {
   const colorMap: Record<string, string> = {
@@ -171,38 +285,44 @@ function StatCard({
         </div>
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <div className="flex items-center gap-1 mt-1">
-        {trendUp ? (
-          <TrendingUp size={14} className="text-emerald-500" />
-        ) : (
-          <TrendingDown size={14} className="text-red-500" />
-        )}
-        <span
-          className={`text-xs ${
-            trendUp ? "text-emerald-600" : "text-red-500"
-          }`}
-        >
-          {trend}
-        </span>
-      </div>
+      {trend && (
+        <div className="flex items-center gap-1 mt-1">
+          {trendUp !== undefined &&
+            (trendUp ? (
+              <TrendingUp size={14} className="text-emerald-500" />
+            ) : (
+              <TrendingDown size={14} className="text-red-500" />
+            ))}
+          <span
+            className={`text-xs ${
+              trendUp === undefined
+                ? "text-gray-400"
+                : trendUp
+                ? "text-emerald-600"
+                : "text-red-500"
+            }`}
+          >
+            {trend}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
-function CalendarGrid({ month, year }: { month: number; year: number }) {
+function MonthCalendar({
+  cursor,
+  events,
+}: {
+  cursor: Date;
+  events: Map<string, DashboardEvent[]>;
+}) {
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  // Sample events
-  const events: Record<number, { label: string; color: string }[]> = {
-    3: [
-      { label: "Tech Summit 23", color: "bg-blue-100 text-blue-700" },
-      { label: "Wedding Reception", color: "bg-purple-100 text-purple-700" },
-    ],
-    15: [{ label: "Corporate Event", color: "bg-amber-100 text-amber-700" }],
-    22: [{ label: "Board Meeting", color: "bg-emerald-100 text-emerald-700" }],
-  };
+  const today = new Date();
 
   return (
     <div>
@@ -222,8 +342,11 @@ function CalendarGrid({ month, year }: { month: number; year: number }) {
         ))}
         {Array.from({ length: daysInMonth }).map((_, i) => {
           const day = i + 1;
-          const dayEvents = events[day] || [];
-          const isToday = day === 11; // Simulate Oct 11 as today
+          const isToday =
+            today.getFullYear() === year &&
+            today.getMonth() === month &&
+            today.getDate() === day;
+          const dayEvents = events.get(dateKey(year, month, day)) ?? [];
           return (
             <div
               key={day}
@@ -240,39 +363,99 @@ function CalendarGrid({ month, year }: { month: number; year: number }) {
               >
                 {day}
               </span>
-              {dayEvents.map((ev, idx) => (
+              {dayEvents.slice(0, 2).map((ev, idx) => (
                 <div
                   key={idx}
-                  className={`text-[10px] px-1 py-0.5 rounded mt-0.5 truncate ${ev.color}`}
+                  className={`text-[10px] px-1 py-0.5 rounded mt-0.5 truncate ${
+                    ev.type === "arrival"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
                 >
                   {ev.label}
                 </div>
               ))}
+              {dayEvents.length > 2 && (
+                <div className="text-[10px] text-gray-400 px-1">
+                  +{dayEvents.length - 2} more
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-      {/* Legend */}
       <div className="flex gap-4 mt-4 pt-3 border-t border-gray-100">
-        {["Pending", "Confirmed", "In-Progress", "Completed"].map(
-          (status, i) => {
-            const colors = [
-              "bg-gray-300",
-              "bg-blue-400",
-              "bg-amber-400",
-              "bg-emerald-400",
-            ];
-            return (
-              <div key={status} className="flex items-center gap-1.5">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full ${colors[i]}`}
-                />
-                <span className="text-xs text-gray-500">{status}</span>
-              </div>
-            );
-          }
-        )}
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+          <span className="text-xs text-gray-500">Arrivals</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+          <span className="text-xs text-gray-500">Departures</span>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function WeekView({
+  start,
+  events,
+}: {
+  start: Date;
+  events: Map<string, DashboardEvent[]>;
+}) {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+  const today = new Date();
+
+  return (
+    <div className="space-y-2">
+      {days.map((d) => {
+        const key = toISO(d);
+        const dayEvents = events.get(key) ?? [];
+        const isToday = d.toDateString() === today.toDateString();
+        return (
+          <div
+            key={key}
+            className={`rounded-lg border p-3 ${
+              isToday ? "border-emerald-300 bg-emerald-50" : "border-gray-100"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium text-gray-700">
+                {d.toLocaleDateString("default", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+              <span className="text-xs text-gray-400">
+                {dayEvents.length} event{dayEvents.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            {dayEvents.length === 0 ? (
+              <p className="text-xs text-gray-400">No arrivals or departures</p>
+            ) : (
+              <div className="space-y-1">
+                {dayEvents.map((ev, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        ev.type === "arrival" ? "bg-emerald-400" : "bg-amber-400"
+                      }`}
+                    />
+                    <span className="text-gray-600">{ev.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

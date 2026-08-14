@@ -9,8 +9,10 @@ import {
   Clock,
   Users,
   Waves,
+  X,
+  Loader2,
 } from "lucide-react";
-import { api, pageMeta } from "@/lib/api";
+import { api, getSession, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
@@ -31,6 +33,19 @@ export default function SwimmingPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search);
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [sessionForm, setSessionForm] = useState({
+    client_name: "",
+    client_phone_number: "",
+    client_email: "",
+    entry_time: "",
+    exit_time: "",
+    charge: "",
+    description: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useApi<SwimmingData>(
     async () => {
@@ -57,6 +72,59 @@ export default function SwimmingPage() {
     total_sessions: 0,
     total_revenue: 0,
     clients_served: 0,
+  };
+
+  const openAddModal = () => {
+    setModalError(null);
+    setSessionForm({
+      client_name: "",
+      client_phone_number: "",
+      client_email: "",
+      entry_time: "",
+      exit_time: "",
+      charge: "",
+      description: "",
+    });
+    setShowAddModal(true);
+  };
+
+  const handleSubmit = async () => {
+    if (
+      !sessionForm.client_name.trim() ||
+      !sessionForm.client_phone_number.trim() ||
+      !sessionForm.entry_time ||
+      !sessionForm.exit_time
+    ) {
+      setModalError("Client name, phone, entry and exit times are required.");
+      return;
+    }
+
+    const session = getSession();
+    const userId = session.user?.id ?? 1;
+
+    setSaving(true);
+    setModalError(null);
+    try {
+      await api.createSwimmingPoolSession({
+        client_name: sessionForm.client_name.trim(),
+        client_phone_number: sessionForm.client_phone_number.trim(),
+        client_email: sessionForm.client_email || null,
+        charge: sessionForm.charge ? Number(sessionForm.charge) : undefined,
+        entry_time: sessionForm.entry_time,
+        exit_time: sessionForm.exit_time,
+        description: sessionForm.description || null,
+        captured_by: userId,
+        verified_by: null,
+      });
+      setShowAddModal(false);
+      reload();
+    } catch (e) {
+      setModalError(
+        e instanceof Error ? e.message : "Failed to add session."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -125,7 +193,10 @@ export default function SwimmingPage() {
             <Download size={16} />
             Export
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+          >
             <Plus size={18} />
             + New Session
           </button>
@@ -229,6 +300,189 @@ export default function SwimmingPage() {
           />
         </div>
       </PageState>
+
+      {showAddModal && (
+        <AddSessionModal
+          form={sessionForm}
+          setForm={setSessionForm}
+          error={modalError}
+          saving={saving}
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
+    </div>
+  );
+}
+
+type SessionFormState = {
+  client_name: string;
+  client_phone_number: string;
+  client_email: string;
+  entry_time: string;
+  exit_time: string;
+  charge: string;
+  description: string;
+};
+
+function AddSessionModal({
+  form,
+  setForm,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  form: SessionFormState;
+  setForm: (form: SessionFormState) => void;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">New Session</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Client Name *
+            </label>
+            <input
+              type="text"
+              value={form.client_name}
+              onChange={(e) =>
+                setForm({ ...form, client_name: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone *
+              </label>
+              <input
+                type="text"
+                value={form.client_phone_number}
+                onChange={(e) =>
+                  setForm({ ...form, client_phone_number: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                value={form.client_email}
+                onChange={(e) =>
+                  setForm({ ...form, client_email: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Entry Time *
+              </label>
+              <input
+                type="time"
+                value={form.entry_time}
+                onChange={(e) =>
+                  setForm({ ...form, entry_time: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Exit Time *
+              </label>
+              <input
+                type="time"
+                value={form.exit_time}
+                onChange={(e) =>
+                  setForm({ ...form, exit_time: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Charge ($)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.charge}
+              onChange={(e) => setForm({ ...form, charge: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+        {error && (
+          <div className="mx-5 mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 px-4 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -135,7 +135,7 @@ export interface BarTransaction {
   id: number;
   type: string;
   quantity: number;
-  unit: string;
+  unit: number;
   price_per_unit: number;
   total_price: number;
   date: string;
@@ -256,6 +256,32 @@ export interface SwimmingPoolSessionsResponse
     total_revenue: number;
     clients_served: number;
   };
+}
+
+export interface DashboardEvent {
+  date: string;
+  type: "arrival" | "departure";
+  label: string;
+}
+
+export interface DashboardResponse {
+  stats: {
+    today_arrivals: number;
+    yesterday_arrivals: number;
+    today_departures: number;
+    yesterday_departures: number;
+    active_guests: number;
+    occupied_rooms: number;
+    total_rooms: number;
+  };
+  recent_check_ins: {
+    id: number;
+    guest_name: string;
+    room_name?: string | null;
+    checkin_date: string;
+    checkin_time: string;
+  }[];
+  events: DashboardEvent[];
 }
 
 export interface LoginResponse {

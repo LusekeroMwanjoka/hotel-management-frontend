@@ -9,8 +9,10 @@ import {
   Clock,
   Building2,
   DollarSign,
+  X,
+  Loader2,
 } from "lucide-react";
-import { api, pageMeta } from "@/lib/api";
+import { api, getSession, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
@@ -57,6 +59,19 @@ export default function ConferencePage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [bookingForm, setBookingForm] = useState({
+    hall_name: "",
+    hall_number: "",
+    date: "",
+    start_time: "",
+    end_time: "",
+    charge: "",
+    description: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
   const { data, loading, error, reload } = useApi<ConferenceData>(
     async () => {
       const res = await api.conferenceHallBookings({
@@ -79,6 +94,65 @@ export default function ConferencePage() {
   const today = new Date();
   const currentMonth = today.toLocaleString("default", { month: "long" });
   const currentYear = today.getFullYear();
+
+  const openAddModal = () => {
+    setModalError(null);
+    setBookingForm({
+      hall_name: "",
+      hall_number: "",
+      date: new Date().toISOString().slice(0, 10),
+      start_time: "",
+      end_time: "",
+      charge: "",
+      description: "",
+    });
+    setShowAddModal(true);
+  };
+
+  const handleSubmit = async () => {
+    if (
+      !bookingForm.hall_name.trim() ||
+      !bookingForm.hall_number.trim() ||
+      !bookingForm.date ||
+      !bookingForm.start_time ||
+      !bookingForm.end_time ||
+      !bookingForm.charge
+    ) {
+      setModalError(
+        "Hall name, hall number, date, times and charge are required."
+      );
+      return;
+    }
+
+    const session = getSession();
+    const userId = session.user?.id ?? 1;
+
+    setSaving(true);
+    setModalError(null);
+    try {
+      await api.createConferenceHallBooking({
+        hall_name: bookingForm.hall_name.trim(),
+        hall_number: bookingForm.hall_number.trim(),
+        date: bookingForm.date,
+        start_time: bookingForm.start_time,
+        end_time: bookingForm.end_time,
+        entry_time: bookingForm.start_time,
+        exit_time: bookingForm.end_time,
+        charge: Number(bookingForm.charge),
+        description: bookingForm.description || null,
+        captured_by: userId,
+        verified_by: null,
+      });
+      setShowAddModal(false);
+      reload();
+    } catch (e) {
+      setModalError(
+        e instanceof Error ? e.message : "Failed to add booking."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -125,7 +199,10 @@ export default function ConferencePage() {
               className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 w-56"
             />
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+          >
             <Plus size={18} />
             New Booking
           </button>
@@ -170,6 +247,17 @@ export default function ConferencePage() {
           onPageChange={setPage}
         />
       </PageState>
+
+      {showAddModal && (
+        <AddBookingModal
+          form={bookingForm}
+          setForm={setBookingForm}
+          error={modalError}
+          saving={saving}
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
     </div>
   );
 }
@@ -424,6 +512,176 @@ function BookingTable({
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+type BookingFormState = {
+  hall_name: string;
+  hall_number: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  charge: string;
+  description: string;
+};
+
+function AddBookingModal({
+  form,
+  setForm,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  form: BookingFormState;
+  setForm: (form: BookingFormState) => void;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">New Booking</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hall Name *
+              </label>
+              <input
+                type="text"
+                value={form.hall_name}
+                onChange={(e) =>
+                  setForm({ ...form, hall_name: e.target.value })
+                }
+                placeholder="e.g. Main Hall"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hall Number *
+              </label>
+              <input
+                type="text"
+                value={form.hall_number}
+                onChange={(e) =>
+                  setForm({ ...form, hall_number: e.target.value })
+                }
+                placeholder="e.g. H-01"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date *
+            </label>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Time *
+              </label>
+              <input
+                type="time"
+                value={form.start_time}
+                onChange={(e) =>
+                  setForm({ ...form, start_time: e.target.value })
+                }
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Time *
+              </label>
+              <input
+                type="time"
+                value={form.end_time}
+                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Charge ($) *
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.charge}
+              onChange={(e) => setForm({ ...form, charge: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+        {error && (
+          <div className="mx-5 mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 px-4 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
