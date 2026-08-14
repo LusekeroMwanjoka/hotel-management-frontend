@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Search,
   Plus,
@@ -9,51 +9,48 @@ import {
   Clock,
   MoreHorizontal,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
+import { Pagination } from "@/components/Pagination";
 import type { GymSubscription } from "@/lib/types";
 
-export default function GymPage() {
-  const { data, loading, error, reload } = useApi<GymSubscription[]>(
-    async () => {
-      const res = await api.gymSubscriptions();
-      return res.data ?? [];
-    }
-  );
+interface GymData {
+  subscriptions: GymSubscription[];
+  meta: { total: number; currentPage: number; lastPage: number };
+  types: string[];
+}
 
+export default function GymPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All Types");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search);
 
-  const subscriptions = data ?? [];
-  const today = new Date().toISOString().slice(0, 10);
-
-  const types = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          subscriptions.map((s) => s.subscription_type?.name ?? "Unknown")
-        )
-      ).sort(),
-    [subscriptions]
+  const { data, loading, error, reload } = useApi<GymData>(
+    async () => {
+      const [subsRes, typesRes] = await Promise.all([
+        api.gymSubscriptions({
+          page,
+          search: debouncedSearch || undefined,
+          type: typeFilter !== "All Types" ? typeFilter : undefined,
+        }),
+        api.gymSubscriptionTypes(),
+      ]);
+      return {
+        subscriptions: subsRes.data ?? [],
+        meta: pageMeta(subsRes),
+        types: (typesRes.data ?? []).map((t) => t.name).sort(),
+      };
+    },
+    [page, typeFilter, debouncedSearch]
   );
 
-  const filtered = subscriptions.filter((sub) => {
-    const typeName = sub.subscription_type?.name ?? "Unknown";
-    const memberName = sub.guest?.full_name
-      ? sub.guest.full_name
-      : [sub.guest?.first_name, sub.guest?.last_name].filter(Boolean).join(" ");
-    if (typeFilter !== "All Types" && typeName !== typeFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (
-        !memberName.toLowerCase().includes(q) &&
-        !typeName.toLowerCase().includes(q)
-      )
-        return false;
-    }
-    return true;
-  });
+  const subscriptions = data?.subscriptions ?? [];
+  const meta = data?.meta ?? { total: 0, currentPage: 1, lastPage: 1 };
+  const types = data?.types ?? [];
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -73,13 +70,19 @@ export default function GymPage() {
               type="text"
               placeholder="Search members..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option>All Types</option>
@@ -139,7 +142,7 @@ export default function GymPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((sub) => {
+                {subscriptions.map((sub) => {
                   const memberName = sub.guest?.full_name
                     ? sub.guest.full_name
                     : [sub.guest?.first_name, sub.guest?.last_name]
@@ -203,6 +206,14 @@ export default function GymPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={meta.currentPage}
+            lastPage={meta.lastPage}
+            total={meta.total}
+            shown={subscriptions.length}
+            loading={loading}
+            onPageChange={setPage}
+          />
         </div>
       </PageState>
     </div>

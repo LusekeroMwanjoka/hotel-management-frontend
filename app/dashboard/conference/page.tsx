@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Plus,
   Search,
@@ -10,9 +10,11 @@ import {
   Building2,
   DollarSign,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
+import { Pagination } from "@/components/Pagination";
 import type { ConferenceHallBooking } from "@/lib/types";
 
 function bookingStatus(date: string) {
@@ -43,36 +45,40 @@ const statusConfig: Record<
   },
 };
 
-export default function ConferencePage() {
-  const { data, loading, error, reload } = useApi<ConferenceHallBooking[]>(
-    async () => {
-      const res = await api.conferenceHallBookings();
-      return res.data ?? [];
-    }
-  );
+interface ConferenceData {
+  bookings: ConferenceHallBooking[];
+  meta: { total: number; currentPage: number; lastPage: number };
+}
 
+export default function ConferencePage() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const debouncedSearch = useDebouncedValue(search);
 
-  const bookings = data ?? [];
+  const { data, loading, error, reload } = useApi<ConferenceData>(
+    async () => {
+      const res = await api.conferenceHallBookings({
+        page,
+        search: debouncedSearch || undefined,
+      });
+      return {
+        bookings: res.data ?? [],
+        meta: pageMeta(res),
+      };
+    },
+    [page, debouncedSearch]
+  );
+
+  const bookings = data?.bookings ?? [];
+  const meta = data?.meta ?? { total: 0, currentPage: 1, lastPage: 1 };
   const selectedBooking =
     bookings.find((b) => b.id === selectedId) ?? bookings[0] ?? null;
 
   const today = new Date();
   const currentMonth = today.toLocaleString("default", { month: "long" });
   const currentYear = today.getFullYear();
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    if (!q) return bookings;
-    return bookings.filter(
-      (b) =>
-        b.hall_name.toLowerCase().includes(q) ||
-        b.hall_number.toLowerCase().includes(q) ||
-        (b.description ?? "").toLowerCase().includes(q)
-    );
-  }, [bookings, search]);
 
   return (
     <div className="space-y-6">
@@ -112,7 +118,10 @@ export default function ConferencePage() {
               type="text"
               placeholder="Search bookings..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 w-56"
             />
           </div>
@@ -140,18 +149,26 @@ export default function ConferencePage() {
               <CalendarGrid
                 month={today.getMonth()}
                 year={today.getFullYear()}
-                bookings={filtered}
+                bookings={bookings}
               />
             </div>
             <BookingDetail booking={selectedBooking} />
           </div>
         ) : (
           <BookingTable
-            bookings={filtered}
+            bookings={bookings}
             onSelect={setSelectedId}
             selectedId={selectedBooking?.id ?? null}
           />
         )}
+        <Pagination
+          currentPage={meta.currentPage}
+          lastPage={meta.lastPage}
+          total={meta.total}
+          shown={bookings.length}
+          loading={loading}
+          onPageChange={setPage}
+        />
       </PageState>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, Filter } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
@@ -50,36 +50,65 @@ const statusConfig: Record<
 
 interface RoomsData {
   rooms: Room[];
+  stats: Partial<Record<RoomOccupancyStatus, number>>;
+  roomTypes: string[];
+  floors: number[];
+  total: number;
+  currentPage: number;
+  lastPage: number;
   checkIns: CheckIn[];
   checkOuts: CheckOut[];
 }
 
-function roomFloor(name: string) {
-  const n = parseInt(name.replace(/\D/g, ""), 10);
-  if (Number.isNaN(n)) return 0;
-  return Math.floor(n / 100);
-}
-
 export default function RoomStatusPage() {
-  const { data, loading, error, reload } = useApi<RoomsData>(async () => {
-    const [roomsRes, checkInsRes, checkOutsRes] = await Promise.all([
-      api.rooms(),
-      api.checkIns(),
-      api.checkOuts(),
-    ]);
-    return {
-      rooms: roomsRes.data ?? [],
-      checkIns: checkInsRes.data ?? [],
-      checkOuts: checkOutsRes.data ?? [],
-    };
-  });
-
+  const [page, setPage] = useState(1);
   const [roomTypeFilter, setRoomTypeFilter] = useState("All Types");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [floorFilter, setFloorFilter] = useState("All Floors");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, loading, error, reload } = useApi<RoomsData>(
+    async () => {
+      const [roomsRes, checkInsRes, checkOutsRes] = await Promise.all([
+        api.rooms({
+          page,
+          room_type: roomTypeFilter !== "All Types" ? roomTypeFilter : undefined,
+          occupancy_status:
+            statusFilter !== "All Statuses" ? statusFilter : undefined,
+          floor: floorFilter !== "All Floors" ? floorFilter : undefined,
+          search: debouncedSearch || undefined,
+        }),
+        api.checkIns(),
+        api.checkOuts(),
+      ]);
+      return {
+        rooms: roomsRes.data ?? [],
+        stats: roomsRes.stats ?? {},
+        roomTypes: roomsRes.room_types ?? [],
+        floors: roomsRes.floors ?? [],
+        total: roomsRes.meta?.total ?? 0,
+        currentPage: roomsRes.meta?.current_page ?? 1,
+        lastPage: roomsRes.meta?.last_page ?? 1,
+        checkIns: checkInsRes.data ?? [],
+        checkOuts: checkOutsRes.data ?? [],
+      };
+    },
+    [page, roomTypeFilter, statusFilter, floorFilter, debouncedSearch]
+  );
 
   const rooms = data?.rooms ?? [];
+  const stats = data?.stats ?? {};
+  const roomTypes = data?.roomTypes ?? [];
+  const floors = data?.floors ?? [];
+  const total = data?.total ?? 0;
+  const currentPage = data?.currentPage ?? 1;
+  const lastPage = data?.lastPage ?? 1;
   const checkIns = data?.checkIns ?? [];
   const checkOuts = data?.checkOuts ?? [];
 
@@ -94,52 +123,9 @@ export default function RoomStatusPage() {
     }
   }
 
-  const roomTypes = useMemo(
-    () =>
-      Array.from(
-        new Set(rooms.map((r) => r.room_type?.name ?? "Unknown"))
-      ).sort(),
-    [rooms]
-  );
-  const floors = useMemo(
-    () =>
-      Array.from(new Set(rooms.map((r) => roomFloor(r.name)))).sort(
-        (a, b) => a - b
-      ),
-    [rooms]
-  );
-
-  const filtered = rooms.filter((room) => {
-    const typeName = room.room_type?.name ?? "Unknown";
-    if (roomTypeFilter !== "All Types" && typeName !== roomTypeFilter)
-      return false;
-    if (
-      statusFilter !== "All Statuses" &&
-      room.occupancy_status !== statusFilter
-    )
-      return false;
-    if (floorFilter !== "All Floors" && roomFloor(room.name) !== parseInt(floorFilter))
-      return false;
-    if (search) {
-      const guest = guestByRoom.get(room.id) ?? "";
-      if (
-        !room.name.toLowerCase().includes(search.toLowerCase()) &&
-        !guest.toLowerCase().includes(search.toLowerCase())
-      )
-        return false;
-    }
-    return true;
-  });
-
-  const occupiedCount = rooms.filter(
-    (r) => r.occupancy_status === "occupied"
-  ).length;
-  const availableCount = rooms.filter(
-    (r) => r.occupancy_status === "available"
-  ).length;
-  const occupancyRate = rooms.length
-    ? Math.round((occupiedCount / rooms.length) * 100)
-    : 0;
+  const availableCount = stats.available ?? 0;
+  const occupiedCount = stats.occupied ?? 0;
+  const occupancyRate = total ? Math.round((occupiedCount / total) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -178,19 +164,28 @@ export default function RoomStatusPage() {
               type="text"
               placeholder="Search room or guest..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
           <Filter size={18} className="text-gray-400" />
           <SelectFilter
             value={roomTypeFilter}
-            onChange={setRoomTypeFilter}
+            onChange={(v) => {
+              setRoomTypeFilter(v);
+              setPage(1);
+            }}
             options={["All Types", ...roomTypes]}
           />
           <SelectFilter
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(v) => {
+              setStatusFilter(v);
+              setPage(1);
+            }}
             options={[
               "All Statuses",
               "available",
@@ -202,7 +197,10 @@ export default function RoomStatusPage() {
           />
           <SelectFilter
             value={floorFilter}
-            onChange={setFloorFilter}
+            onChange={(v) => {
+              setFloorFilter(v);
+              setPage(1);
+            }}
             options={["All Floors", ...floors.map(String)]}
           />
         </div>
@@ -211,7 +209,7 @@ export default function RoomStatusPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="font-semibold text-gray-800 mb-4">Status Board</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((room) => {
+            {rooms.map((room) => {
               const cfg = statusConfig[room.occupancy_status] ?? statusConfig.available;
               const guest = guestByRoom.get(room.id);
               return (
@@ -244,6 +242,34 @@ export default function RoomStatusPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+            <p className="text-sm text-gray-500">
+              Showing {rooms.length} of {total} rooms
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1 || loading}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {lastPage}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+                disabled={currentPage >= lastPage || loading}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </PageState>

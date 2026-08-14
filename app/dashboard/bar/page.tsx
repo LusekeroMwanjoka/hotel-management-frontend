@@ -9,9 +9,11 @@ import {
   ShoppingCart,
   Receipt,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
+import { Pagination } from "@/components/Pagination";
 import type { BarTransaction } from "@/lib/types";
 
 type Tab = "sales" | "purchases";
@@ -19,6 +21,8 @@ type Tab = "sales" | "purchases";
 interface BarData {
   sales: BarTransaction[];
   purchases: BarTransaction[];
+  salesMeta: { total: number; currentPage: number; lastPage: number };
+  purchasesMeta: { total: number; currentPage: number; lastPage: number };
 }
 
 const drinkTypeColors: Record<string, string> = {
@@ -37,27 +41,32 @@ function capitalize(value: string) {
 }
 
 export default function BarPage() {
-  const { data, loading, error, reload } = useApi<BarData>(async () => {
-    const [salesRes, purchasesRes] = await Promise.all([
-      api.barSales(),
-      api.barPurchases(),
-    ]);
-    return {
-      sales: salesRes.data ?? [],
-      purchases: purchasesRes.data ?? [],
-    };
-  });
-
   const [activeTab, setActiveTab] = useState<Tab>("sales");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search);
+
+  const { data, loading, error, reload } = useApi<BarData>(
+    async () => {
+      const [salesRes, purchasesRes] = await Promise.all([
+        api.barSales({ page, search: debouncedSearch || undefined }),
+        api.barPurchases({ page, search: debouncedSearch || undefined }),
+      ]);
+      return {
+        sales: salesRes.data ?? [],
+        purchases: purchasesRes.data ?? [],
+        salesMeta: pageMeta(salesRes),
+        purchasesMeta: pageMeta(purchasesRes),
+      };
+    },
+    [page, debouncedSearch]
+  );
 
   const items = activeTab === "sales" ? data?.sales ?? [] : data?.purchases ?? [];
-
-  const filtered = items.filter(
-    (item) =>
-      item.type.toLowerCase().includes(search.toLowerCase()) ||
-      item.date.includes(search)
-  );
+  const meta =
+    activeTab === "sales"
+      ? data?.salesMeta ?? { total: 0, currentPage: 1, lastPage: 1 }
+      : data?.purchasesMeta ?? { total: 0, currentPage: 1, lastPage: 1 };
 
   return (
     <div className="space-y-6">
@@ -69,7 +78,10 @@ export default function BarPage() {
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setPage(1);
+            }}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.id
                 ? "bg-white text-gray-900 shadow-sm"
@@ -93,7 +105,10 @@ export default function BarPage() {
             type="text"
             placeholder={`Search ${activeTab}...`}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
@@ -148,7 +163,7 @@ export default function BarPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((item) => (
+                {items.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <span
@@ -188,6 +203,14 @@ export default function BarPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={meta.currentPage}
+            lastPage={meta.lastPage}
+            total={meta.total}
+            shown={items.length}
+            loading={loading}
+            onPageChange={setPage}
+          />
         </div>
       </PageState>
     </div>

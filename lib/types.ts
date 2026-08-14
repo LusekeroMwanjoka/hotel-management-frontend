@@ -243,6 +243,21 @@ export interface Paginated<T> {
   };
 }
 
+export interface RoomsResponse extends Paginated<Room> {
+  stats?: Partial<Record<RoomOccupancyStatus, number>>;
+  room_types?: string[];
+  floors?: number[];
+}
+
+export interface SwimmingPoolSessionsResponse
+  extends Paginated<SwimmingPoolSession> {
+  stats?: {
+    total_sessions: number;
+    total_revenue: number;
+    clients_served: number;
+  };
+}
+
 export interface LoginResponse {
   token?: string;
   user?: User;

@@ -26,7 +26,7 @@ const steps = [
 export default function CheckInPage() {
   const router = useRouter();
   const { data: rooms, loading, error, reload } = useApi<Room[]>(async () => {
-    const res = await api.rooms();
+    const res = await api.rooms({ occupancy_status: "available", per_page: 500 });
     return res.data ?? [];
   });
 

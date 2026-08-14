@@ -2,62 +2,66 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Search, User, Clock, CalendarDays } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
+import { Pagination } from "@/components/Pagination";
 import type { SparAppointment, SparService } from "@/lib/types";
 
 interface SpaData {
   services: SparService[];
   appointments: SparAppointment[];
+  meta: { total: number; currentPage: number; lastPage: number };
 }
 
 export default function SpaPage() {
-  const { data, loading, error, reload } = useApi<SpaData>(async () => {
-    const [servicesRes, appointmentsRes] = await Promise.all([
-      api.sparServices(),
-      api.sparAppointments(),
-    ]);
-    return {
-      services: servicesRes.data ?? [],
-      appointments: appointmentsRes.data ?? [],
-    };
-  });
-
   const [serviceFilter, setServiceFilter] = useState("All Services");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search);
+
+  const { data, loading, error, reload } = useApi<SpaData>(
+    async () => {
+      const [servicesRes, appointmentsRes] = await Promise.all([
+        api.sparServices(),
+        api.sparAppointments({
+          page,
+          search: debouncedSearch || undefined,
+          service:
+            serviceFilter !== "All Services" ? serviceFilter : undefined,
+        }),
+      ]);
+      return {
+        services: servicesRes.data ?? [],
+        appointments: appointmentsRes.data ?? [],
+        meta: pageMeta(appointmentsRes),
+      };
+    },
+    [page, serviceFilter, debouncedSearch]
+  );
 
   const appointments = data?.appointments ?? [];
   const services = data?.services ?? [];
+  const meta = data?.meta ?? { total: 0, currentPage: 1, lastPage: 1 };
 
-  const filtered = appointments
-    .filter((a) => {
-      const serviceName = a.spar_service?.name ?? "Unknown";
-      if (serviceFilter !== "All Services" && serviceName !== serviceFilter)
-        return false;
-      if (search) {
-        const q = search.toLowerCase();
-        if (
-          !a.client_name.toLowerCase().includes(q) &&
-          !serviceName.toLowerCase().includes(q)
-        )
-          return false;
-      }
-      return true;
-    })
-    .sort((a, b) =>
-      `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`)
-    );
+  const sorted = useMemo(
+    () =>
+      [...appointments].sort((a, b) =>
+        `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`)
+      ),
+    [appointments]
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, SparAppointment[]>();
-    for (const appt of filtered) {
+    for (const appt of sorted) {
       const list = map.get(appt.date) ?? [];
       list.push(appt);
       map.set(appt.date, list);
     }
     return Array.from(map.entries());
-  }, [filtered]);
+  }, [sorted]);
 
   return (
     <div className="space-y-6">
@@ -77,13 +81,19 @@ export default function SpaPage() {
               type="text"
               placeholder="Search client or service..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
           <select
             value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
+            onChange={(e) => {
+              setServiceFilter(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option>All Services</option>
@@ -158,6 +168,14 @@ export default function SpaPage() {
             </div>
           ))}
         </div>
+        <Pagination
+          currentPage={meta.currentPage}
+          lastPage={meta.lastPage}
+          total={meta.total}
+          shown={appointments.length}
+          loading={loading}
+          onPageChange={setPage}
+        />
       </PageState>
     </div>
   );

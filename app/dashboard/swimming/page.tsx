@@ -10,38 +10,54 @@ import {
   Users,
   Waves,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
+import { Pagination } from "@/components/Pagination";
 import type { SwimmingPoolSession } from "@/lib/types";
 
+interface SwimmingData {
+  sessions: SwimmingPoolSession[];
+  meta: { total: number; currentPage: number; lastPage: number };
+  stats: {
+    total_sessions: number;
+    total_revenue: number;
+    clients_served: number;
+  };
+}
+
 export default function SwimmingPage() {
-  const { data, loading, error, reload } = useApi<SwimmingPoolSession[]>(
-    async () => {
-      const res = await api.swimmingPoolSessions();
-      return res.data ?? [];
-    }
-  );
-
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search);
 
-  const sessions = data ?? [];
-  const today = new Date().toISOString().slice(0, 10);
-
-  const filtered = sessions.filter(
-    (s) =>
-      s.client_name.toLowerCase().includes(search.toLowerCase()) ||
-      s.client_phone_number.includes(search)
+  const { data, loading, error, reload } = useApi<SwimmingData>(
+    async () => {
+      const res = await api.swimmingPoolSessions({
+        page,
+        search: debouncedSearch || undefined,
+      });
+      return {
+        sessions: res.data ?? [],
+        meta: pageMeta(res),
+        stats: res.stats ?? {
+          total_sessions: 0,
+          total_revenue: 0,
+          clients_served: 0,
+        },
+      };
+    },
+    [page, debouncedSearch]
   );
 
-  const todaySessions = sessions.filter((s) => {
-    // Sessions don't carry a date; count all as today's records for now.
-    return true;
-  }).length;
-  const totalRevenue = sessions.reduce(
-    (sum, s) => sum + Number(s.charge ?? 0),
-    0
-  );
+  const sessions = data?.sessions ?? [];
+  const meta = data?.meta ?? { total: 0, currentPage: 1, lastPage: 1 };
+  const stats = data?.stats ?? {
+    total_sessions: 0,
+    total_revenue: 0,
+    clients_served: 0,
+  };
 
   return (
     <div className="space-y-6">
@@ -59,7 +75,7 @@ export default function SwimmingPage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-gray-900">
-            {todaySessions}
+            {stats.total_sessions}
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -70,7 +86,7 @@ export default function SwimmingPage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-gray-900">
-            ${totalRevenue.toFixed(2)}
+            ${stats.total_revenue.toFixed(2)}
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -81,7 +97,7 @@ export default function SwimmingPage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-gray-900">
-            {new Set(sessions.map((s) => s.client_name)).size}
+            {stats.clients_served}
           </p>
         </div>
       </div>
@@ -97,7 +113,10 @@ export default function SwimmingPage() {
             type="text"
             placeholder="Search by name or phone..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
@@ -152,7 +171,7 @@ export default function SwimmingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((session) => (
+                {sessions.map((session) => (
                   <tr key={session.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-gray-800">
@@ -200,6 +219,14 @@ export default function SwimmingPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={meta.currentPage}
+            lastPage={meta.lastPage}
+            total={meta.total}
+            shown={sessions.length}
+            loading={loading}
+            onPageChange={setPage}
+          />
         </div>
       </PageState>
     </div>

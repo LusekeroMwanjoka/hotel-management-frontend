@@ -10,9 +10,11 @@ import {
   ShoppingCart,
   Receipt,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
+import { Pagination } from "@/components/Pagination";
 import type {
   RestaurantFoodPurchase,
   RestaurantMenu,
@@ -25,6 +27,9 @@ interface RestaurantData {
   menus: RestaurantMenu[];
   sales: RestaurantSale[];
   purchases: RestaurantFoodPurchase[];
+  menusMeta: { total: number; currentPage: number; lastPage: number };
+  salesMeta: { total: number; currentPage: number; lastPage: number };
+  purchasesMeta: { total: number; currentPage: number; lastPage: number };
 }
 
 const typeConfig: Record<string, string> = {
@@ -40,32 +45,52 @@ function typeLabel(type: string) {
 }
 
 export default function RestaurantPage() {
-  const { data, loading, error, reload } = useApi<RestaurantData>(async () => {
-    const [menusRes, salesRes, purchasesRes] = await Promise.all([
-      api.restaurantMenus(),
-      api.restaurantSales(),
-      api.restaurantFoodPurchases(),
-    ]);
-    return {
-      menus: menusRes.data ?? [],
-      sales: salesRes.data ?? [],
-      purchases: purchasesRes.data ?? [],
-    };
-  });
-
   const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search);
+
+  const { data, loading, error, reload } = useApi<RestaurantData>(
+    async () => {
+      const [menusRes, salesRes, purchasesRes] = await Promise.all([
+        api.restaurantMenus({ page, search: debouncedSearch || undefined }),
+        api.restaurantSales({ page, search: debouncedSearch || undefined }),
+        api.restaurantFoodPurchases({
+          page,
+          search: debouncedSearch || undefined,
+        }),
+      ]);
+      return {
+        menus: menusRes.data ?? [],
+        sales: salesRes.data ?? [],
+        purchases: purchasesRes.data ?? [],
+        menusMeta: pageMeta(menusRes),
+        salesMeta: pageMeta(salesRes),
+        purchasesMeta: pageMeta(purchasesRes),
+      };
+    },
+    [page, debouncedSearch]
+  );
 
   const menus = data?.menus ?? [];
   const sales = data?.sales ?? [];
   const purchases = data?.purchases ?? [];
 
-  const empty =
+  const meta =
     activeTab === "menu"
-      ? menus.length === 0
+      ? data?.menusMeta ?? { total: 0, currentPage: 1, lastPage: 1 }
       : activeTab === "sales"
-      ? sales.length === 0
-      : purchases.length === 0;
+      ? data?.salesMeta ?? { total: 0, currentPage: 1, lastPage: 1 }
+      : data?.purchasesMeta ?? { total: 0, currentPage: 1, lastPage: 1 };
+
+  const shown =
+    activeTab === "menu"
+      ? menus.length
+      : activeTab === "sales"
+      ? sales.length
+      : purchases.length;
+
+  const empty = shown === 0;
 
   return (
     <div className="space-y-6">
@@ -78,7 +103,10 @@ export default function RestaurantPage() {
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setPage(1);
+            }}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.id
                 ? "bg-white text-gray-900 shadow-sm"
@@ -102,7 +130,10 @@ export default function RestaurantPage() {
             type="text"
             placeholder={`Search ${activeTab}...`}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
@@ -129,29 +160,23 @@ export default function RestaurantPage() {
         onRetry={reload}
         empty={empty}
       >
-        {activeTab === "menu" && <MenuTable items={menus} search={search} />}
-        {activeTab === "sales" && <SalesTable sales={sales} search={search} />}
-        {activeTab === "purchases" && (
-          <PurchasesTable purchases={purchases} search={search} />
-        )}
+        {activeTab === "menu" && <MenuTable items={menus} />}
+        {activeTab === "sales" && <SalesTable sales={sales} />}
+        {activeTab === "purchases" && <PurchasesTable purchases={purchases} />}
+        <Pagination
+          currentPage={meta.currentPage}
+          lastPage={meta.lastPage}
+          total={meta.total}
+          shown={shown}
+          loading={loading}
+          onPageChange={setPage}
+        />
       </PageState>
     </div>
   );
 }
 
-function MenuTable({
-  items,
-  search,
-}: {
-  items: RestaurantMenu[];
-  search: string;
-}) {
-  const filtered = items.filter(
-    (i) =>
-      i.name.toLowerCase().includes(search.toLowerCase()) ||
-      typeLabel(i.type).toLowerCase().includes(search.toLowerCase())
-  );
-
+function MenuTable({ items }: { items: RestaurantMenu[] }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
@@ -176,7 +201,7 @@ function MenuTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((item) => (
+            {items.map((item) => (
               <tr key={item.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <p className="text-sm font-medium text-gray-800">
@@ -212,17 +237,7 @@ function MenuTable({
   );
 }
 
-function SalesTable({
-  sales,
-  search,
-}: {
-  sales: RestaurantSale[];
-  search: string;
-}) {
-  const filtered = sales.filter((s) =>
-    (s.restaurant_menu?.name ?? "").toLowerCase().includes(search.toLowerCase())
-  );
-
+function SalesTable({ sales }: { sales: RestaurantSale[] }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
@@ -247,7 +262,7 @@ function SalesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((sale) => (
+            {sales.map((sale) => (
               <tr key={sale.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
                   {sale.restaurant_menu?.name ?? `#${sale.restaurant_menu_id}`}
@@ -271,19 +286,7 @@ function SalesTable({
   );
 }
 
-function PurchasesTable({
-  purchases,
-  search,
-}: {
-  purchases: RestaurantFoodPurchase[];
-  search: string;
-}) {
-  const filtered = purchases.filter(
-    (p) =>
-      p.food_item.toLowerCase().includes(search.toLowerCase()) ||
-      (p.supplier ?? "").toLowerCase().includes(search.toLowerCase())
-  );
-
+function PurchasesTable({ purchases }: { purchases: RestaurantFoodPurchase[] }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
@@ -314,7 +317,7 @@ function PurchasesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((p) => (
+            {purchases.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
                   {p.food_item}
