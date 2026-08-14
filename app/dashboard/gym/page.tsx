@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   X,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { api, getSession, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
@@ -345,6 +346,17 @@ function AddSubscriptionModal({
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const [guestDropdownOpen, setGuestDropdownOpen] = useState(false);
+  const [guestSearch, setGuestSearch] = useState("");
+
+  const selectedGuest =
+    guests.find((g) => g.id === Number(form.guest_id)) ?? null;
+  const filteredGuests = guests.filter((g) => {
+    const q = guestSearch.toLowerCase();
+    if (!q) return true;
+    return guestName(g).toLowerCase().includes(q);
+  });
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -394,18 +406,61 @@ function AddSubscriptionModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Guest *
             </label>
-            <select
-              value={form.guest_id}
-              onChange={(e) => setForm({ ...form, guest_id: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">Select a guest</option>
-              {guests.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {guestName(g)}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setGuestDropdownOpen((o) => !o)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-left focus:outline-none focus:ring-2 focus:ring-emerald-500 flex items-center justify-between"
+              >
+                <span
+                  className={
+                    selectedGuest ? "text-gray-800" : "text-gray-400"
+                  }
+                >
+                  {selectedGuest ? guestName(selectedGuest) : "Select a guest"}
+                </span>
+                <ChevronDown size={16} className="text-gray-400" />
+              </button>
+              {guestDropdownOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white rounded-lg border border-gray-200 shadow-lg">
+                  <div className="p-2 border-b border-gray-100">
+                    <input
+                      type="text"
+                      placeholder="Search guests..."
+                      value={guestSearch}
+                      onChange={(e) => setGuestSearch(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {filteredGuests.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-gray-400">
+                        No guests found.
+                      </p>
+                    ) : (
+                      filteredGuests.map((g) => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => {
+                            setForm({ ...form, guest_id: String(g.id) });
+                            setGuestDropdownOpen(false);
+                            setGuestSearch("");
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                            Number(form.guest_id) === g.id
+                              ? "bg-emerald-50"
+                              : ""
+                          }`}
+                        >
+                          {guestName(g)}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
