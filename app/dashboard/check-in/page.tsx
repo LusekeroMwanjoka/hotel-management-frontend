@@ -428,7 +428,7 @@ export default function CheckInPage() {
                           ) : (
                             filteredGuests.map((g) => {
                               const name =
-                                g.full_name ||
+                                g.full_name + " (" + g.id_number + ")" ||
                                 [g.first_name, g.last_name]
                                   .filter(Boolean)
                                   .join(" ");
