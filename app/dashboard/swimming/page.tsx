@@ -154,7 +154,7 @@ export default function SwimmingPage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-gray-900">
-            ${stats.total_revenue.toFixed(2)}
+            MWK {stats.total_revenue.toFixed(2)}
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -265,7 +265,7 @@ export default function SwimmingPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                      ${Number(session.charge ?? 0).toFixed(2)}
+                      MWK {Number(session.charge ?? 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {session.entry_time}
@@ -430,7 +430,7 @@ function AddSessionModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Charge ($)
+              Charge (MWK)
             </label>
             <input
               type="number"

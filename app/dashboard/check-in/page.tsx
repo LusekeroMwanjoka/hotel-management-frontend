@@ -10,11 +10,12 @@ import {
   Banknote,
   X,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { api, getSession } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { PageState } from "@/components/DataState";
-import type { Room } from "@/lib/types";
+import type { Guest, Room } from "@/lib/types";
 
 export default function CheckInPage() {
   const router = useRouter();
@@ -28,10 +29,20 @@ export default function CheckInPage() {
     [rooms]
   );
 
+  const { data: existingGuests } = useApi<Guest[]>(async () => {
+    const res = await api.guestsAll();
+    return res.data ?? [];
+  });
+
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [showRoomSelector, setShowRoomSelector] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [guestMode, setGuestMode] = useState<"new" | "existing">("new");
+  const [existingGuestId, setExistingGuestId] = useState("");
+  const [guestDropdownOpen, setGuestDropdownOpen] = useState(false);
+  const [guestSearch, setGuestSearch] = useState("");
 
   // Guest form
   const [guest, setGuest] = useState({
@@ -66,13 +77,32 @@ export default function CheckInPage() {
 
   const total = roomRate * nights;
 
+  const selectedExistingGuest =
+    existingGuests?.find((g) => g.id === Number(existingGuestId)) ?? null;
+  const filteredGuests = (existingGuests ?? []).filter((g) => {
+    const q = guestSearch.toLowerCase();
+    if (!q) return true;
+    const name =
+      g.full_name || [g.first_name, g.last_name].filter(Boolean).join(" ");
+    return name.toLowerCase().includes(q);
+  });
+
   const handleSubmit = async () => {
     if (!selectedRoom) {
       setSubmitError("Please select a room.");
       return;
     }
-    if (!guest.firstName || !guest.lastName || !guest.nationality) {
-      setSubmitError("Guest first name, last name and nationality are required.");
+    if (guestMode === "existing" && !existingGuestId) {
+      setSubmitError("Please select an existing guest.");
+      return;
+    }
+    if (
+      guestMode === "new" &&
+      (!guest.firstName || !guest.lastName || !guest.nationality)
+    ) {
+      setSubmitError(
+        "Guest first name, last name and nationality are required."
+      );
       return;
     }
 
@@ -80,21 +110,27 @@ export default function CheckInPage() {
     setSubmitError(null);
 
     try {
-      const createdGuest = await api.createGuest({
-        first_name: guest.firstName,
-        last_name: guest.lastName,
-        nationality: guest.nationality,
-        email: guest.email || null,
-        phone: guest.phone || null,
-        id_number: guest.idNumber || null,
-        next_of_kin_name: guest.nextOfKin || null,
-      });
+      let guestId: number;
+      if (guestMode === "existing") {
+        guestId = Number(existingGuestId);
+      } else {
+        const createdGuest = await api.createGuest({
+          first_name: guest.firstName,
+          last_name: guest.lastName,
+          nationality: guest.nationality,
+          email: guest.email || null,
+          phone: guest.phone || null,
+          id_number: guest.idNumber || null,
+          next_of_kin_name: guest.nextOfKin || null,
+        });
+        guestId = createdGuest.id;
+      }
 
       const session = getSession();
       const checkinBy = session.user?.id ?? 1;
 
       await api.createCheckIn({
-        guest_id: createdGuest.id,
+        guest_id: guestId,
         room_id: selectedRoom.id,
         checkin_date: checkInDate,
         checkin_time: checkInTime,
@@ -197,7 +233,7 @@ export default function CheckInPage() {
                               {room.name}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {room.room_type?.name ?? "—"} • $
+                              {room.room_type?.name ?? "—"} • MWK
                               {Number(room.room_type?.base_rate ?? 0).toFixed(2)}
                               /night
                             </p>
@@ -225,11 +261,35 @@ export default function CheckInPage() {
                 Guest Information
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    First Name *
-                  </label>
+              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit mb-4">
+                <button
+                  onClick={() => setGuestMode("new")}
+                  className={`px-3 py-1.5 text-sm rounded-md font-medium ${
+                    guestMode === "new"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  New Guest
+                </button>
+                <button
+                  onClick={() => setGuestMode("existing")}
+                  className={`px-3 py-1.5 text-sm rounded-md font-medium ${
+                    guestMode === "existing"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Existing Guest
+                </button>
+              </div>
+
+              {guestMode === "new" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      First Name *
+                    </label>
                   <input
                     type="text"
                     value={guest.firstName}
@@ -321,6 +381,83 @@ export default function CheckInPage() {
                   />
                 </div>
               </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Guest *
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setGuestDropdownOpen((o) => !o)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-left focus:outline-none focus:ring-2 focus:ring-emerald-500 flex items-center justify-between"
+                    >
+                      <span
+                        className={
+                          selectedExistingGuest ? "text-gray-800" : "text-gray-400"
+                        }
+                      >
+                        {selectedExistingGuest
+                          ? selectedExistingGuest.full_name ||
+                            [
+                              selectedExistingGuest.first_name,
+                              selectedExistingGuest.last_name,
+                            ]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "Choose an existing guest"}
+                      </span>
+                      <ChevronDown size={16} className="text-gray-400" />
+                    </button>
+                    {guestDropdownOpen && (
+                      <div className="absolute z-10 mt-1 w-full bg-white rounded-lg border border-gray-200 shadow-lg">
+                        <div className="p-2 border-b border-gray-100">
+                          <input
+                            type="text"
+                            placeholder="Search guests..."
+                            value={guestSearch}
+                            onChange={(e) => setGuestSearch(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="max-h-60 overflow-y-auto">
+                          {filteredGuests.length === 0 ? (
+                            <p className="px-3 py-2 text-sm text-gray-400">
+                              No guests found.
+                            </p>
+                          ) : (
+                            filteredGuests.map((g) => {
+                              const name =
+                                g.full_name ||
+                                [g.first_name, g.last_name]
+                                  .filter(Boolean)
+                                  .join(" ");
+                              return (
+                                <button
+                                  key={g.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setExistingGuestId(String(g.id));
+                                    setGuestDropdownOpen(false);
+                                    setGuestSearch("");
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                                    Number(existingGuestId) === g.id
+                                      ? "bg-emerald-50"
+                                      : ""
+                                  }`}
+                                >
+                                  {name}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -408,10 +545,10 @@ export default function CheckInPage() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">
-                    Room Rate (${roomRate.toFixed(2)} × {nights})
+                    Room Rate (MWK {roomRate.toFixed(2)} × {nights})
                   </span>
                   <span className="font-medium text-gray-800">
-                    ${total.toFixed(2)}
+                    MWK {total.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between pt-3 border-t border-gray-200">
@@ -419,7 +556,7 @@ export default function CheckInPage() {
                     Total Balance
                   </span>
                   <span className="font-bold text-lg text-gray-900">
-                    ${total.toFixed(2)}
+                    MWK {total.toFixed(2)}
                   </span>
                 </div>
               </div>

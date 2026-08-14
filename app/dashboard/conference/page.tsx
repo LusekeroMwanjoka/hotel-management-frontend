@@ -402,13 +402,13 @@ function BookingDetail({
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Charge</span>
             <span className="font-medium text-gray-800">
-              ${Number(booking.charge ?? 0).toFixed(2)}
+              MWK {Number(booking.charge ?? 0).toFixed(2)}
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Overage Penalty</span>
             <span className="font-medium text-gray-800">
-              ${Number(booking.exceeding_penalty ?? 0).toFixed(2)}
+              MWK {Number(booking.exceeding_penalty ?? 0).toFixed(2)}
             </span>
           </div>
         </div>
@@ -498,7 +498,7 @@ function BookingTable({
                     {b.start_time} - {b.end_time}
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                    ${Number(b.charge ?? 0).toFixed(2)}
+                    MWK {Number(b.charge ?? 0).toFixed(2)}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -630,7 +630,7 @@ function AddBookingModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Charge ($) *
+              Charge (MWK) *
             </label>
             <input
               type="number"

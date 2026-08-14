@@ -283,7 +283,7 @@ export default function SpaPage() {
                     )}
                     <div className="text-right">
                       <p className="text-sm font-medium text-gray-800">
-                        ${Number(appt.charge ?? 0).toFixed(2)}
+                        MWK {Number(appt.charge ?? 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -397,7 +397,7 @@ function AddAppointmentModal({
               <option value="">Select a service</option>
               {services.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} — ${Number(s.charge ?? 0).toFixed(2)}
+                  {s.name} — MWK {Number(s.charge ?? 0).toFixed(2)}
                 </option>
               ))}
             </select>
@@ -484,7 +484,7 @@ function AddAppointmentModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Charge ($)
+              Charge (MWK)
             </label>
             <input
               type="number"
@@ -608,7 +608,7 @@ function AddServiceModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Charge ($)
+              Charge (MWK)
             </label>
             <input
               type="number"

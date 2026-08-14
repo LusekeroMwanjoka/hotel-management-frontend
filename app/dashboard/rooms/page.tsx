@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Filter, Plus, X, Loader2 } from "lucide-react";
+import { Search, Filter, Plus, X, Loader2, Settings, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { PageState } from "@/components/DataState";
@@ -92,6 +92,9 @@ export default function RoomStatusPage() {
   });
   const [savingType, setSavingType] = useState(false);
   const [typeError, setTypeError] = useState<string | null>(null);
+
+  const [showManageTypes, setShowManageTypes] = useState(false);
+  const [editingType, setEditingType] = useState<RoomType | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -195,6 +198,7 @@ export default function RoomStatusPage() {
 
   const openAddRoomType = () => {
     setTypeError(null);
+    setEditingType(null);
     setRoomTypeForm({
       code: "",
       name: "",
@@ -206,6 +210,32 @@ export default function RoomStatusPage() {
     setShowAddRoomType(true);
   };
 
+  const openEditRoomType = (type: RoomType) => {
+    setTypeError(null);
+    setEditingType(type);
+    setRoomTypeForm({
+      code: type.code,
+      name: type.name,
+      base_rate: String(type.base_rate ?? ""),
+      bed_type: type.bed_type ?? "single",
+      description: type.description ?? "",
+      notes: type.notes ?? "",
+    });
+    setShowAddRoomType(true);
+  };
+
+  const handleDeleteRoomType = async (type: RoomType) => {
+    if (!window.confirm(`Delete room type "${type.name}"?`)) return;
+    try {
+      await api.deleteRoomType(type.id);
+      reload();
+    } catch (e) {
+      window.alert(
+        e instanceof Error ? e.message : "Failed to delete room type."
+      );
+    }
+  };
+
   const handleCreateRoomType = async () => {
     if (
       !roomTypeForm.code.trim() ||
@@ -215,22 +245,28 @@ export default function RoomStatusPage() {
       setTypeError("Code, name and base rate are required.");
       return;
     }
+    const payload = {
+      code: roomTypeForm.code.trim(),
+      name: roomTypeForm.name.trim(),
+      base_rate: Number(roomTypeForm.base_rate),
+      bed_type: roomTypeForm.bed_type,
+      description: roomTypeForm.description || null,
+      notes: roomTypeForm.notes || null,
+    };
     setSavingType(true);
     setTypeError(null);
     try {
-      await api.createRoomType({
-        code: roomTypeForm.code.trim(),
-        name: roomTypeForm.name.trim(),
-        base_rate: Number(roomTypeForm.base_rate),
-        bed_type: roomTypeForm.bed_type,
-        description: roomTypeForm.description || null,
-        notes: roomTypeForm.notes || null,
-      });
+      if (editingType) {
+        await api.updateRoomType(editingType.id, payload);
+      } else {
+        await api.createRoomType(payload);
+      }
       setShowAddRoomType(false);
+      setEditingType(null);
       reload();
     } catch (e) {
       setTypeError(
-        e instanceof Error ? e.message : "Failed to add room type."
+        e instanceof Error ? e.message : "Failed to save room type."
       );
     } finally {
       setSavingType(false);
@@ -308,6 +344,13 @@ export default function RoomStatusPage() {
             options={["All Floors", ...floors.map(String)]}
           />
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setShowManageTypes(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Settings size={18} />
+              Manage Types
+            </button>
             <button
               onClick={openAddRoomType}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -414,12 +457,28 @@ export default function RoomStatusPage() {
 
       {showAddRoomType && (
         <AddRoomTypeModal
+          editing={editingType}
           form={roomTypeForm}
           setForm={setRoomTypeForm}
           error={typeError}
           saving={savingType}
-          onClose={() => setShowAddRoomType(false)}
+          onClose={() => {
+            setShowAddRoomType(false);
+            setEditingType(null);
+          }}
           onSubmit={handleCreateRoomType}
+        />
+      )}
+
+      {showManageTypes && (
+        <ManageRoomTypesModal
+          roomTypes={roomTypeOptions}
+          onClose={() => setShowManageTypes(false)}
+          onEdit={(type) => {
+            setShowManageTypes(false);
+            openEditRoomType(type);
+          }}
+          onDelete={handleDeleteRoomType}
         />
       )}
     </div>
@@ -520,7 +579,7 @@ function AddRoomModal({
               <option value="">Select a room type</option>
               {roomTypes.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} — ${Number(t.base_rate ?? 0).toFixed(2)}/night
+                  {t.name} — MWK {Number(t.base_rate ?? 0).toFixed(2)}/night
                 </option>
               ))}
             </select>
@@ -610,6 +669,7 @@ type RoomTypeFormState = {
 };
 
 function AddRoomTypeModal({
+  editing,
   form,
   setForm,
   error,
@@ -617,6 +677,7 @@ function AddRoomTypeModal({
   onClose,
   onSubmit,
 }: {
+  editing?: RoomType | null;
   form: RoomTypeFormState;
   setForm: (form: RoomTypeFormState) => void;
   error: string | null;
@@ -634,7 +695,9 @@ function AddRoomTypeModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-800">Add Room Type</h3>
+          <h3 className="font-semibold text-gray-800">
+            {editing ? "Edit Room Type" : "Add Room Type"}
+          </h3>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
@@ -669,7 +732,7 @@ function AddRoomTypeModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Base Rate ($) *
+              Base Rate (MWK) *
             </label>
             <input
               type="number"
@@ -747,8 +810,92 @@ function AddRoomTypeModal({
                 Saving...
               </>
             ) : (
-              "Add Room Type"
+              editing ? "Save Changes" : "Add Room Type"
             )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ManageRoomTypesModal({
+  roomTypes,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  roomTypes: RoomType[];
+  onClose: () => void;
+  onEdit: (type: RoomType) => void;
+  onDelete: (type: RoomType) => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-white rounded-xl border border-gray-200 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800">Manage Room Types</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5">
+          {roomTypes.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">
+              No room types yet.
+            </p>
+          ) : (
+            <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+              {roomTypes.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      {t.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {t.code} • {t.bed_type ?? "—"} • MWK{" "}
+                      {Number(t.base_rate ?? 0).toFixed(2)}/night
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onEdit(t)}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                      aria-label="Edit"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      onClick={() => onDelete(t)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"
+                      aria-label="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Close
           </button>
         </div>
       </div>

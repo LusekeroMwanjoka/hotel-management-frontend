@@ -380,7 +380,7 @@ function MenuTable({ items }: { items: RestaurantMenu[] }) {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  ${Number(item.price ?? 0).toFixed(2)}
+                  MWK {Number(item.price ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
                   {item.description}
@@ -430,7 +430,7 @@ function SalesTable({ sales }: { sales: RestaurantSale[] }) {
                   {sale.restaurant_menu?.name ?? `#${sale.restaurant_menu_id}`}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-700">
-                  ${Number(sale.price ?? 0).toFixed(2)}
+                  MWK {Number(sale.price ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">{sale.date}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">
@@ -488,10 +488,10 @@ function PurchasesTable({ purchases }: { purchases: RestaurantFoodPurchase[] }) 
                   {p.quantity} {p.unit}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-700">
-                  ${Number(p.unit_cost ?? 0).toFixed(2)}
+                  MWK {Number(p.unit_cost ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  ${Number(p.total_cost ?? 0).toFixed(2)}
+                  MWK {Number(p.total_cost ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
                   {p.purchase_date}
@@ -655,7 +655,7 @@ function AddMenuModal({
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Price ($) *
+          Price (MWK) *
         </label>
         <input
           type="number"
@@ -721,14 +721,14 @@ function AddSaleModal({
           <option value="">Select an item</option>
           {menus.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name} — ${Number(m.price ?? 0).toFixed(2)}
+              {m.name} — MWK {Number(m.price ?? 0).toFixed(2)}
             </option>
           ))}
         </select>
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Price ($) *
+          Price (MWK) *
         </label>
         <input
           type="number"
@@ -858,7 +858,7 @@ function AddPurchaseModal({
       <div className="flex justify-between text-sm">
         <span className="text-gray-500">Total Cost</span>
         <span className="font-medium text-gray-800">
-          ${totalCost.toFixed(2)}
+          MWK {totalCost.toFixed(2)}
         </span>
       </div>
       <div>

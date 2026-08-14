@@ -251,10 +251,10 @@ export default function BarPage() {
                       {Number(item.quantity ?? 0)} × {Number(item.unit ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      ${Number(item.price_per_unit ?? 0).toFixed(2)}
+                      MWK {Number(item.price_per_unit ?? 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                      ${Number(item.total_price ?? 0).toFixed(2)}
+                      MWK {Number(item.total_price ?? 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {item.date}
@@ -407,7 +407,7 @@ function AddBarModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Price Per Unit ($) *
+              Price Per Unit (MWK) *
             </label>
             <input
               type="number"
@@ -434,7 +434,7 @@ function AddBarModal({
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Total</span>
             <span className="font-medium text-gray-800">
-              ${total.toFixed(2)}
+              MWK {total.toFixed(2)}
             </span>
           </div>
         </div>

@@ -247,7 +247,7 @@ export default function GymPage() {
                         {sub.end_date}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                        ${Number(sub.charge ?? 0).toFixed(2)}
+                        MWK {Number(sub.charge ?? 0).toFixed(2)}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -385,7 +385,7 @@ function AddSubscriptionModal({
               <option value="">Select a type</option>
               {subscriptionTypes.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} — ${Number(t.charge ?? 0).toFixed(2)}
+                  {t.name} — MWK {Number(t.charge ?? 0).toFixed(2)}
                 </option>
               ))}
             </select>
@@ -435,7 +435,7 @@ function AddSubscriptionModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Charge ($)
+              Charge (MWK)
             </label>
             <input
               type="number"

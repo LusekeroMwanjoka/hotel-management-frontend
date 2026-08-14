@@ -181,6 +181,15 @@ export const api = {
     });
     return res.data;
   },
+  updateRoomType: async (id: number, payload: Partial<RoomType>) => {
+    const res = await request<{ data: RoomType }>(`/room-types/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  deleteRoomType: (id: number) =>
+    request<void>(`/room-types/${id}`, { method: "DELETE" }),
 
   // Guests
   guests: () => list<Guest>("/guests"),
