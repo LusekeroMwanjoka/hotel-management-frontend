@@ -75,7 +75,8 @@ export default function BarPage() {
     [page, debouncedSearch]
   );
 
-  const items = activeTab === "sales" ? data?.sales ?? [] : data?.purchases ?? [];
+  const items: BarTransaction[] =
+    activeTab === "sales" ? data?.sales ?? [] : data?.purchases ?? [];
   const meta =
     activeTab === "sales"
       ? data?.salesMeta ?? { total: 0, currentPage: 1, lastPage: 1 }
