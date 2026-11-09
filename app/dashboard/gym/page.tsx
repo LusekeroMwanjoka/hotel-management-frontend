@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   Plus,
@@ -12,11 +12,16 @@ import {
   Loader2,
   ChevronDown,
 } from "lucide-react";
-import { api, getSession, pageMeta } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
 import { Pagination } from "@/components/Pagination";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import {
+  loadGuests,
+  loadGymSubscriptionTypes,
+} from "@/lib/slices/referenceSlice";
 import type {
   Guest,
   GymSubscription,
@@ -25,10 +30,7 @@ import type {
 
 interface GymData {
   subscriptions: GymSubscription[];
-  subscriptionTypes: GymSubscriptionType[];
-  guests: Guest[];
   meta: { total: number; currentPage: number; lastPage: number };
-  types: string[];
 }
 
 export default function GymPage() {
@@ -37,33 +39,35 @@ export default function GymPage() {
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search);
 
+  const dispatch = useAppDispatch();
   const { data, loading, error, reload } = useApi<GymData>(
     async () => {
-      const [subsRes, typesRes, guestsRes] = await Promise.all([
-        api.gymSubscriptions({
-          page,
-          search: debouncedSearch || undefined,
-          type: typeFilter !== "All Types" ? typeFilter : undefined,
-        }),
-        api.gymSubscriptionTypes(),
-        api.guestsAll(),
-      ]);
+      const subsRes = await api.gymSubscriptions({
+        page,
+        search: debouncedSearch || undefined,
+        type: typeFilter !== "All Types" ? typeFilter : undefined,
+      });
       return {
         subscriptions: subsRes.data ?? [],
-        subscriptionTypes: typesRes.data ?? [],
-        guests: guestsRes.data ?? [],
         meta: pageMeta(subsRes),
-        types: (typesRes.data ?? []).map((t) => t.name).sort(),
       };
     },
     [page, typeFilter, debouncedSearch]
   );
 
   const subscriptions = data?.subscriptions ?? [];
-  const subscriptionTypes = data?.subscriptionTypes ?? [];
-  const guests = data?.guests ?? [];
   const meta = data?.meta ?? { total: 0, currentPage: 1, lastPage: 1 };
-  const types = data?.types ?? [];
+
+  const subscriptionTypes = useAppSelector(
+    (s) => s.reference.gymSubscriptionTypes
+  );
+  const guests = useAppSelector((s) => s.reference.guests);
+  const types = subscriptionTypes.map((t) => t.name).sort();
+
+  useEffect(() => {
+    dispatch(loadGymSubscriptionTypes());
+    dispatch(loadGuests());
+  }, [dispatch]);
   const today = new Date().toISOString().slice(0, 10);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -102,9 +106,6 @@ export default function GymPage() {
       return;
     }
 
-    const session = getSession();
-    const userId = session.user?.id ?? 1;
-
     setSaving(true);
     setModalError(null);
     try {
@@ -114,8 +115,6 @@ export default function GymPage() {
         start_date: subForm.start_date,
         end_date: subForm.end_date,
         charge: subForm.charge ? Number(subForm.charge) : undefined,
-        captured_by: userId,
-        verified_by: null,
       });
       setShowAddModal(false);
       reload();

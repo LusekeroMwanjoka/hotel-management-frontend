@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -12,13 +12,16 @@ import {
   Loader2,
   ChevronDown,
 } from "lucide-react";
-import { api, getSession } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { PageState } from "@/components/DataState";
-import type { Guest, Room } from "@/lib/types";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import { invalidateGuests, loadGuests } from "@/lib/slices/referenceSlice";
+import type { Room } from "@/lib/types";
 
 export default function CheckInPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const { data: rooms, loading, error, reload } = useApi<Room[]>(async () => {
     const res = await api.rooms({ occupancy_status: "available", per_page: 500 });
     return res.data ?? [];
@@ -29,10 +32,11 @@ export default function CheckInPage() {
     [rooms]
   );
 
-  const { data: existingGuests } = useApi<Guest[]>(async () => {
-    const res = await api.guestsAll();
-    return res.data ?? [];
-  });
+  const existingGuests = useAppSelector((s) => s.reference.guests);
+
+  useEffect(() => {
+    dispatch(loadGuests());
+  }, [dispatch]);
 
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [showRoomSelector, setShowRoomSelector] = useState(false);
@@ -124,10 +128,8 @@ export default function CheckInPage() {
           next_of_kin_name: guest.nextOfKin || null,
         });
         guestId = createdGuest.id;
+        dispatch(invalidateGuests());
       }
-
-      const session = getSession();
-      const checkinBy = session.user?.id ?? 1;
 
       await api.createCheckIn({
         guest_id: guestId,
@@ -139,7 +141,6 @@ export default function CheckInPage() {
         base_rate: roomRate,
         number_of_days: nights,
         mode_of_payment: paymentMethod,
-        checkin_by: checkinBy,
       });
 
       router.push("/dashboard");

@@ -12,7 +12,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import { api, getSession, pageMeta } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
@@ -124,9 +124,6 @@ export default function ConferencePage() {
       return;
     }
 
-    const session = getSession();
-    const userId = session.user?.id ?? 1;
-
     setSaving(true);
     setModalError(null);
     try {
@@ -140,8 +137,6 @@ export default function ConferencePage() {
         exit_time: bookingForm.end_time,
         charge: Number(bookingForm.charge),
         description: bookingForm.description || null,
-        captured_by: userId,
-        verified_by: null,
       });
       setShowAddModal(false);
       reload();

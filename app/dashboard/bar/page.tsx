@@ -11,7 +11,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import { api, getSession, pageMeta } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
@@ -105,20 +105,12 @@ export default function BarPage() {
       return;
     }
 
-    const session = getSession();
-    const userId = session.user?.id ?? 1;
     const payload = {
       type: barForm.type,
       quantity: Number(barForm.quantity),
       unit: Number(barForm.unit),
       price_per_unit: Number(barForm.price_per_unit),
-      total_price:
-        Number(barForm.quantity) *
-        Number(barForm.unit) *
-        Number(barForm.price_per_unit),
       date: barForm.date,
-      captured_by: userId,
-      verified_by: userId,
     };
 
     setModalError(null);

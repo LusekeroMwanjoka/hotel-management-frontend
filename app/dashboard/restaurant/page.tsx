@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   Plus,
@@ -12,11 +12,16 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import { api, getSession, pageMeta } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
 import { Pagination } from "@/components/Pagination";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import {
+  invalidateRestaurantMenus,
+  loadRestaurantMenus,
+} from "@/lib/slices/referenceSlice";
 import type {
   RestaurantFoodPurchase,
   RestaurantMenu,
@@ -27,7 +32,6 @@ type Tab = "menu" | "sales" | "purchases";
 
 interface RestaurantData {
   menus: RestaurantMenu[];
-  menuOptions: RestaurantMenu[];
   sales: RestaurantSale[];
   purchases: RestaurantFoodPurchase[];
   menusMeta: { total: number; currentPage: number; lastPage: number };
@@ -38,12 +42,12 @@ interface RestaurantData {
 const typeConfig: Record<string, string> = {
   starter: "bg-blue-100 text-blue-700",
   "main-course": "bg-emerald-100 text-emerald-700",
-  dissert: "bg-purple-100 text-purple-700",
+  dessert: "bg-purple-100 text-purple-700",
 };
 
 function typeLabel(type: string) {
   if (type === "main-course") return "Main Course";
-  if (type === "dissert") return "Dessert";
+  if (type === "dessert") return "Dessert";
   return "Starter";
 }
 
@@ -53,21 +57,24 @@ export default function RestaurantPage() {
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search);
 
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(loadRestaurantMenus());
+  }, [dispatch]);
+
   const { data, loading, error, reload } = useApi<RestaurantData>(
     async () => {
-      const [menusRes, salesRes, purchasesRes, menuOptionsRes] =
-        await Promise.all([
-          api.restaurantMenus({ page, search: debouncedSearch || undefined }),
-          api.restaurantSales({ page, search: debouncedSearch || undefined }),
-          api.restaurantFoodPurchases({
-            page,
-            search: debouncedSearch || undefined,
-          }),
-          api.restaurantMenusAll(),
-        ]);
+      const [menusRes, salesRes, purchasesRes] = await Promise.all([
+        api.restaurantMenus({ page, search: debouncedSearch || undefined }),
+        api.restaurantSales({ page, search: debouncedSearch || undefined }),
+        api.restaurantFoodPurchases({
+          page,
+          search: debouncedSearch || undefined,
+        }),
+      ]);
       return {
         menus: menusRes.data ?? [],
-        menuOptions: menuOptionsRes.data ?? [],
         sales: salesRes.data ?? [],
         purchases: purchasesRes.data ?? [],
         menusMeta: pageMeta(menusRes),
@@ -79,7 +86,7 @@ export default function RestaurantPage() {
   );
 
   const menus = data?.menus ?? [];
-  const menuOptions = data?.menuOptions ?? [];
+  const menuOptions = useAppSelector((s) => s.reference.restaurantMenus);
   const sales = data?.sales ?? [];
   const purchases = data?.purchases ?? [];
 
@@ -148,8 +155,6 @@ export default function RestaurantPage() {
   };
 
   const handleSubmit = async () => {
-    const session = getSession();
-    const userId = session.user?.id ?? 1;
     setModalError(null);
 
     if (
@@ -182,17 +187,17 @@ export default function RestaurantPage() {
       if (activeTab === "menu") {
         await api.createRestaurantMenu({
           name: menuForm.name.trim(),
-          type: menuForm.type,
+          type: menuForm.type as RestaurantMenu["type"],
           price: Number(menuForm.price),
           description: menuForm.description.trim(),
         });
+        dispatch(invalidateRestaurantMenus());
+        dispatch(loadRestaurantMenus());
       } else if (activeTab === "sales") {
         await api.createRestaurantSale({
           restaurant_menu_id: Number(saleForm.restaurant_menu_id),
           price: Number(saleForm.price),
           date: saleForm.date,
-          sale_by: userId,
-          verified_by: userId,
           remarks: saleForm.remarks,
         });
       } else {
@@ -202,11 +207,8 @@ export default function RestaurantPage() {
           quantity: Number(purchaseForm.quantity),
           unit: purchaseForm.unit,
           unit_cost: Number(purchaseForm.unit_cost),
-          total_cost:
-            Number(purchaseForm.quantity) * Number(purchaseForm.unit_cost),
           supplier: purchaseForm.supplier || null,
           invoice_number: purchaseForm.invoice_number || null,
-          captured_by: userId,
           remarks: purchaseForm.remarks || null,
         });
       }

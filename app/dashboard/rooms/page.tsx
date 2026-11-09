@@ -5,6 +5,11 @@ import { Search, Filter, Plus, X, Loader2, Settings, Pencil, Trash2 } from "luci
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { PageState } from "@/components/DataState";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import {
+  invalidateRoomTypes,
+  loadRoomTypes,
+} from "@/lib/slices/referenceSlice";
 import type {
   CheckIn,
   CheckOut,
@@ -51,7 +56,6 @@ const statusConfig: Record<
 
 interface RoomsData {
   rooms: Room[];
-  roomTypeOptions: RoomType[];
   stats: Partial<Record<RoomOccupancyStatus, number>>;
   roomTypes: string[];
   floors: number[];
@@ -101,26 +105,29 @@ export default function RoomStatusPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(loadRoomTypes());
+  }, [dispatch]);
+
   const { data, loading, error, reload } = useApi<RoomsData>(
     async () => {
-      const [roomsRes, checkInsRes, checkOutsRes, roomTypesRes] =
-        await Promise.all([
-          api.rooms({
-            page,
-            room_type:
-              roomTypeFilter !== "All Types" ? roomTypeFilter : undefined,
-            occupancy_status:
-              statusFilter !== "All Statuses" ? statusFilter : undefined,
-            floor: floorFilter !== "All Floors" ? floorFilter : undefined,
-            search: debouncedSearch || undefined,
-          }),
-          api.checkIns(),
-          api.checkOuts(),
-          api.roomTypes(),
-        ]);
+      const [roomsRes, checkInsRes, checkOutsRes] = await Promise.all([
+        api.rooms({
+          page,
+          room_type:
+            roomTypeFilter !== "All Types" ? roomTypeFilter : undefined,
+          occupancy_status:
+            statusFilter !== "All Statuses" ? statusFilter : undefined,
+          floor: floorFilter !== "All Floors" ? floorFilter : undefined,
+          search: debouncedSearch || undefined,
+        }),
+        api.checkIns(),
+        api.checkOuts(),
+      ]);
       return {
         rooms: roomsRes.data ?? [],
-        roomTypeOptions: roomTypesRes.data ?? [],
         stats: roomsRes.stats ?? {},
         roomTypes: roomsRes.room_types ?? [],
         floors: roomsRes.floors ?? [],
@@ -137,7 +144,7 @@ export default function RoomStatusPage() {
   const rooms = data?.rooms ?? [];
   const stats = data?.stats ?? {};
   const roomTypes = data?.roomTypes ?? [];
-  const roomTypeOptions = data?.roomTypeOptions ?? [];
+  const roomTypeOptions = useAppSelector((s) => s.reference.roomTypes);
   const floors = data?.floors ?? [];
   const total = data?.total ?? 0;
   const currentPage = data?.currentPage ?? 1;
@@ -229,6 +236,8 @@ export default function RoomStatusPage() {
     try {
       await api.deleteRoomType(type.id);
       reload();
+      dispatch(invalidateRoomTypes());
+      dispatch(loadRoomTypes());
     } catch (e) {
       window.alert(
         e instanceof Error ? e.message : "Failed to delete room type."
@@ -264,6 +273,8 @@ export default function RoomStatusPage() {
       setShowAddRoomType(false);
       setEditingType(null);
       reload();
+      dispatch(invalidateRoomTypes());
+      dispatch(loadRoomTypes());
     } catch (e) {
       setTypeError(
         e instanceof Error ? e.message : "Failed to save room type."
