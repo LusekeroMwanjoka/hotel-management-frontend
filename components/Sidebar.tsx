@@ -14,37 +14,29 @@ import {
   ChevronLeft,
   ChevronRight,
   PlusCircle,
+  LogOut,
+  Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getSession } from "@/lib/api";
+import { useState } from "react";
+import { useAppSelector } from "@/lib/hooks";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Rooms", href: "/dashboard/rooms", icon: Hotel },
+  { name: "Check Out", href: "/dashboard/check-out", icon: LogOut },
   { name: "Restaurant", href: "/dashboard/restaurant", icon: UtensilsCrossed },
   { name: "Bar", href: "/dashboard/bar", icon: Beer },
   { name: "Gym", href: "/dashboard/gym", icon: Dumbbell },
   { name: "Spa", href: "/dashboard/spa", icon: Sparkles },
   { name: "Pool", href: "/dashboard/swimming", icon: Waves },
   { name: "Conference", href: "/dashboard/conference", icon: Building2 },
+  { name: "Users", href: "/dashboard/users", icon: Users },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [user, setUser] = useState<{ name?: string; role?: string } | null>(
-    null
-  );
-
-  useEffect(() => {
-    const session = getSession();
-    if (session.user) {
-      setUser({
-        name: session.user.name,
-        role: session.user.role ?? session.user.department,
-      });
-    }
-  }, []);
+  const user = useAppSelector((s) => s.auth.user);
 
   const initials = user?.name
     ? user.name
@@ -133,7 +125,7 @@ export default function Sidebar() {
                 {user?.name ?? "Staff"}
               </p>
               <p className="truncate capitalize">
-                {user?.role ?? "Lodge Ops"}
+                {user?.role ?? user?.department ?? "Lodge Ops"}
               </p>
             </div>
           </div>
