@@ -1,17 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, User, Clock, CalendarDays, X, Loader2 } from "lucide-react";
 import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
 import { Pagination } from "@/components/Pagination";
-import type { SparAppointment, SparService } from "@/lib/types";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import {
+  invalidateSpaServices,
+  loadSpaServices,
+} from "@/lib/slices/referenceSlice";
+import type { SpaAppointment, SpaService } from "@/lib/types";
 
 interface SpaData {
-  services: SparService[];
-  appointments: SparAppointment[];
+  appointments: SpaAppointment[];
   meta: { total: number; currentPage: number; lastPage: number };
 }
 
@@ -21,9 +25,15 @@ export default function SpaPage() {
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search);
 
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(loadSpaServices());
+  }, [dispatch]);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [apptForm, setApptForm] = useState({
-    spar_service_id: "",
+    spa_service_id: "",
     client_name: "",
     client_phone_number: "",
     client_email: "",
@@ -48,17 +58,13 @@ export default function SpaPage() {
 
   const { data, loading, error, reload } = useApi<SpaData>(
     async () => {
-      const [servicesRes, appointmentsRes] = await Promise.all([
-        api.sparServices(),
-        api.sparAppointments({
-          page,
-          search: debouncedSearch || undefined,
-          service:
-            serviceFilter !== "All Services" ? serviceFilter : undefined,
-        }),
-      ]);
+      const appointmentsRes = await api.spaAppointments({
+        page,
+        search: debouncedSearch || undefined,
+        service:
+          serviceFilter !== "All Services" ? serviceFilter : undefined,
+      });
       return {
-        services: servicesRes.data ?? [],
         appointments: appointmentsRes.data ?? [],
         meta: pageMeta(appointmentsRes),
       };
@@ -67,7 +73,7 @@ export default function SpaPage() {
   );
 
   const appointments = data?.appointments ?? [];
-  const services = data?.services ?? [];
+  const services = useAppSelector((s) => s.reference.spaServices);
   const meta = data?.meta ?? { total: 0, currentPage: 1, lastPage: 1 };
 
   const sorted = useMemo(
@@ -79,7 +85,7 @@ export default function SpaPage() {
   );
 
   const grouped = useMemo(() => {
-    const map = new Map<string, SparAppointment[]>();
+    const map = new Map<string, SpaAppointment[]>();
     for (const appt of sorted) {
       const list = map.get(appt.date) ?? [];
       list.push(appt);
@@ -91,7 +97,7 @@ export default function SpaPage() {
   const openAddModal = () => {
     setModalError(null);
     setApptForm({
-      spar_service_id: "",
+      spa_service_id: "",
       client_name: "",
       client_phone_number: "",
       client_email: "",
@@ -106,7 +112,7 @@ export default function SpaPage() {
 
   const handleSubmit = async () => {
     if (
-      !apptForm.spar_service_id ||
+      !apptForm.spa_service_id ||
       !apptForm.client_name.trim() ||
       !apptForm.client_phone_number.trim() ||
       !apptForm.date ||
@@ -122,8 +128,8 @@ export default function SpaPage() {
     setSaving(true);
     setModalError(null);
     try {
-      await api.createSparAppointment({
-        spar_service_id: Number(apptForm.spar_service_id),
+      await api.createSpaAppointment({
+        spa_service_id: Number(apptForm.spa_service_id),
         client_name: apptForm.client_name.trim(),
         client_phone_number: apptForm.client_phone_number.trim(),
         client_email: apptForm.client_email || null,
@@ -158,7 +164,7 @@ export default function SpaPage() {
     setSavingService(true);
     setServiceError(null);
     try {
-      await api.createSparService({
+      await api.createSpaService({
         name: serviceForm.name.trim(),
         type: serviceForm.type.trim(),
         charge: serviceForm.charge ? Number(serviceForm.charge) : undefined,
@@ -166,6 +172,8 @@ export default function SpaPage() {
       });
       setShowServiceModal(false);
       reload();
+      dispatch(invalidateSpaServices());
+      dispatch(loadSpaServices());
     } catch (e) {
       setServiceError(
         e instanceof Error ? e.message : "Failed to add service."
@@ -267,7 +275,7 @@ export default function SpaPage() {
                     </div>
                     <div className="flex-1 min-w-[160px]">
                       <p className="text-sm font-semibold text-gray-800">
-                        {appt.spar_service?.name ?? "Service"}
+                        {appt.spa_service?.name ?? "Service"}
                       </p>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <User size={12} />
@@ -329,7 +337,7 @@ export default function SpaPage() {
 }
 
 type ApptFormState = {
-  spar_service_id: string;
+  spa_service_id: string;
   client_name: string;
   client_phone_number: string;
   client_email: string;
@@ -349,7 +357,7 @@ function AddAppointmentModal({
   onClose,
   onSubmit,
 }: {
-  services: SparService[];
+  services: SpaService[];
   form: ApptFormState;
   setForm: (form: ApptFormState) => void;
   error: string | null;
@@ -381,14 +389,14 @@ function AddAppointmentModal({
               Service *
             </label>
             <select
-              value={form.spar_service_id}
+              value={form.spa_service_id}
               onChange={(e) => {
                 const s = services.find(
                   (x) => x.id === Number(e.target.value)
                 );
                 setForm({
                   ...form,
-                  spar_service_id: e.target.value,
+                  spa_service_id: e.target.value,
                   charge: s ? String(s.charge) : form.charge,
                 });
               }}

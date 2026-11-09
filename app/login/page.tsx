@@ -4,9 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { api, saveSession } from "@/lib/api";
+import { useAppDispatch } from "@/lib/hooks";
+import { setUser } from "@/lib/slices/authSlice";
 
 export default function LoginPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +24,8 @@ export default function LoginPage() {
 
     try {
       const response = await api.login({ email, password });
-      saveSession({ token: response.token, user: response.user });
+      saveSession({ user: response.user });
+      dispatch(setUser(response.user ?? null));
       router.push("/dashboard");
     } catch (err) {
       setError(

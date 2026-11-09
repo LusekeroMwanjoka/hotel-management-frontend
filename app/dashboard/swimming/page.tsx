@@ -12,7 +12,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import { api, getSession, pageMeta } from "@/lib/api";
+import { api, pageMeta } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useDebouncedValue } from "@/lib/useDebounce";
 import { PageState } from "@/components/DataState";
@@ -99,9 +99,6 @@ export default function SwimmingPage() {
       return;
     }
 
-    const session = getSession();
-    const userId = session.user?.id ?? 1;
-
     setSaving(true);
     setModalError(null);
     try {
@@ -113,8 +110,6 @@ export default function SwimmingPage() {
         entry_time: sessionForm.entry_time,
         exit_time: sessionForm.exit_time,
         description: sessionForm.description || null,
-        captured_by: userId,
-        verified_by: null,
       });
       setShowAddModal(false);
       reload();
