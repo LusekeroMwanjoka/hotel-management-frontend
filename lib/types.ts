@@ -93,10 +93,26 @@ export interface CheckOut {
   created_at?: string;
 }
 
+export interface CheckOutPenalties {
+  id: number;
+  check_out_id: number;
+  expected_checkout_at: string;
+  actual_checkout_at: string;
+  rate_per_hour: number;
+  number_of_hours: number;
+  total_charge: number;
+  captured_by?: number | null;
+  verified_by?: number | null;
+  check_out?: CheckOut;
+  captured_by_user?: User;
+  verified_by_user?: User;
+  created_at?: string;
+}
+
 export interface RestaurantMenu {
   id: number;
   name: string;
-  type: "starter" | "main-course" | "dissert";
+  type: "starter" | "main-course" | "dessert";
   price: number;
   description: string;
 }
@@ -168,7 +184,7 @@ export interface GymSubscription {
   verified_by_user?: User;
 }
 
-export interface SparService {
+export interface SpaService {
   id: number;
   name: string;
   type: string;
@@ -176,9 +192,9 @@ export interface SparService {
   description?: string | null;
 }
 
-export interface SparAppointment {
+export interface SpaAppointment {
   id: number;
-  spar_service_id: number;
+  spa_service_id: number;
   client_name: string;
   client_phone_number: string;
   client_email?: string | null;
@@ -187,7 +203,7 @@ export interface SparAppointment {
   end_time: string;
   charge: number;
   description?: string | null;
-  spar_service?: SparService;
+  spa_service?: SpaService;
 }
 
 export interface SwimmingPoolSession {
@@ -285,7 +301,6 @@ export interface DashboardResponse {
 }
 
 export interface LoginResponse {
-  token?: string;
   user?: User;
 }
 

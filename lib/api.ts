@@ -3,6 +3,7 @@ import type {
   BarTransaction,
   CheckIn,
   CheckOut,
+  CheckOutPenalties,
   ConferenceHallBooking,
   DashboardResponse,
   Guest,
@@ -16,14 +17,14 @@ import type {
   Room,
   RoomsResponse,
   RoomType,
-  SparAppointment,
-  SparService,
+  SpaAppointment,
+  SpaService,
   SwimmingPoolSession,
   SwimmingPoolSessionsResponse,
+  User,
 } from "./types";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 export class ApiError extends Error {
   status: number;
@@ -35,18 +36,11 @@ export class ApiError extends Error {
   }
 }
 
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
+function jsonHeaders(): Record<string, string> {
+  return {
     Accept: "application/json",
     "Content-Type": "application/json",
   };
-
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("hms_token");
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
 }
 
 async function request<T>(
@@ -55,7 +49,8 @@ async function request<T>(
 ): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { ...authHeaders(), ...(options.headers ?? {}) },
+    headers: { ...jsonHeaders(), ...(options.headers ?? {}) },
+    credentials: "include",
     cache: "no-store",
   });
 
@@ -74,6 +69,15 @@ async function request<T>(
   }
 
   if (!res.ok) {
+    if (
+      res.status === 401 &&
+      typeof window !== "undefined" &&
+      !path.startsWith("/login")
+    ) {
+      clearSession();
+      window.location.href = "/login";
+    }
+
     const message =
       typeof body === "object" && body !== null && "message" in body
         ? String((body as { message: unknown }).message)
@@ -102,15 +106,20 @@ function withQuery(path: string, params: QueryParams = {}) {
 }
 
 async function listAll<T>(path: string): Promise<Paginated<T>> {
-  const first = await request<Paginated<T>>(path);
+  const sep = path.includes("?") ? "&" : "?";
+  const first = await request<Paginated<T>>(`${path}${sep}per_page=500`);
   const lastPage = first.meta?.last_page ?? 1;
   if (lastPage <= 1) return first;
 
+  const remaining = await Promise.all(
+    Array.from({ length: lastPage - 1 }, (_, i) =>
+      request<Paginated<T>>(`${path}${sep}per_page=500&page=${i + 2}`)
+    )
+  );
+
   const data = [...first.data];
-  const sep = path.includes("?") ? "&" : "?";
-  for (let page = 2; page <= lastPage; page++) {
-    const next = await request<Paginated<T>>(`${path}${sep}page=${page}`);
-    data.push(...next.data);
+  for (const page of remaining) {
+    data.push(...page.data);
   }
   return { ...first, data };
 }
@@ -140,6 +149,10 @@ export const api = {
 
   logout() {
     return request<void>("/logout", { method: "POST" });
+  },
+
+  me() {
+    return request<User>("/user");
   },
 
   // Dashboard
@@ -192,7 +205,8 @@ export const api = {
     request<void>(`/room-types/${id}`, { method: "DELETE" }),
 
   // Guests
-  guests: () => list<Guest>("/guests"),
+  guests: (params: { page?: number; search?: string } = {}) =>
+    list<Guest>(withQuery("/guests", params)),
   guestsAll: () => listAll<Guest>("/guests"),
   createGuest: async (payload: Partial<Guest>) => {
     const res = await request<{ data: Guest }>("/guests", {
@@ -212,6 +226,20 @@ export const api = {
     }),
   checkOuts: (params: { page?: number } = {}) =>
     list<CheckOut>(withQuery("/check-outs", params)),
+  createCheckOut: async (payload: Record<string, unknown>) => {
+    const res = await request<{ data: CheckOut }>("/check-outs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  createCheckOutPenalty: async (payload: { check_out_id: number }) => {
+    const res = await request<{ data: CheckOutPenalties }>(
+      "/check-out-penalties",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    return res.data;
+  },
 
   // Restaurant
   restaurantMenus: (params: { page?: number; search?: string } = {}) =>
@@ -284,21 +312,21 @@ export const api = {
   },
 
   // Spa
-  sparServices: () => listAll<SparService>("/spar-services"),
-  sparAppointments: (params: {
+  spaServices: () => listAll<SpaService>("/spa-services"),
+  spaAppointments: (params: {
     page?: number;
     search?: string;
     service?: string;
-  } = {}) => list<SparAppointment>(withQuery("/spar-appointments", params)),
-  createSparAppointment: async (payload: Partial<SparAppointment>) => {
-    const res = await request<{ data: SparAppointment }>("/spar-appointments", {
+  } = {}) => list<SpaAppointment>(withQuery("/spa-appointments", params)),
+  createSpaAppointment: async (payload: Partial<SpaAppointment>) => {
+    const res = await request<{ data: SpaAppointment }>("/spa-appointments", {
       method: "POST",
       body: JSON.stringify(payload),
     });
     return res.data;
   },
-  createSparService: async (payload: Partial<SparService>) => {
-    const res = await request<{ data: SparService }>("/spar-services", {
+  createSpaService: async (payload: Partial<SpaService>) => {
+    const res = await request<{ data: SpaService }>("/spa-services", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -332,6 +360,29 @@ export const api = {
     );
     return res.data;
   },
+
+  // Users (admin)
+  users: (params: { page?: number; search?: string } = {}) =>
+    list<User>(withQuery("/users", params)),
+  createUser: async (payload: Partial<User> & { password?: string }) => {
+    const res = await request<{ data: User }>("/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  updateUser: async (
+    id: number,
+    payload: Partial<User> & { password?: string }
+  ) => {
+    const res = await request<{ data: User }>(`/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+  deleteUser: (id: number) =>
+    request<void>(`/users/${id}`, { method: "DELETE" }),
 };
 
 // --- Auth session helpers -------------------------------------------------
@@ -348,15 +399,14 @@ export function getSession(): AuthSession {
 
 export function saveSession(session: AuthSession) {
   if (typeof window === "undefined") return;
-  localStorage.setItem("hms_session", JSON.stringify(session));
-  if (session.token) localStorage.setItem("hms_token", session.token);
-  else localStorage.removeItem("hms_token");
+  // Only non-sensitive profile info is kept client-side; the auth token
+  // lives in an httpOnly cookie set by the backend.
+  localStorage.setItem("hms_session", JSON.stringify({ user: session.user }));
 }
 
 export function clearSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem("hms_session");
-  localStorage.removeItem("hms_token");
 }
 
 export { BASE_URL };

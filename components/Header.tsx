@@ -3,11 +3,15 @@
 import { Search, Bell, Settings, LogOut } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, clearSession } from "@/lib/api";
+import { useAppDispatch } from "@/lib/hooks";
+import { clearUser } from "@/lib/slices/authSlice";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/rooms": "Room Status",
   "/dashboard/check-in": "New Reservation",
+  "/dashboard/check-out": "Check Out",
+  "/dashboard/users": "User Management",
   "/dashboard/conference": "Conference Hall Bookings",
   "/dashboard/gym": "Gym Subscriptions",
   "/dashboard/spa": "Spa Appointments",
@@ -19,6 +23,7 @@ const pageTitles: Record<string, string> = {
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const title = pageTitles[pathname] || pathname;
 
   const handleLogout = async () => {
@@ -28,6 +33,7 @@ export default function Header() {
       // Token may already be invalid; clear local session regardless.
     }
     clearSession();
+    dispatch(clearUser());
     router.push("/login");
   };
 
